@@ -1,2 +1,4 @@
+#CC=clang
+CC=gcc
 all:
-	gcc clangbind.c -shared -o luaclang.so -lclang
+	${CC} clangbind.c -shared -o luaclang.so -lclang -fPIC -Wall 

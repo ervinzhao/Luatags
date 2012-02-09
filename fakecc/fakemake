@@ -1,0 +1,92 @@
+#! /bin/sh
+
+
+check_dir()
+{
+    if [ -d $tagsdir ]
+    then
+        if ! [ -d $fakebin ]
+        then
+            mkdir $fakebin
+        fi
+    else
+        mkdir $tagsdir
+        mkdir $fakebin
+    fi
+}
+
+check_bin()
+{
+    cd "$fakebin"
+
+    check_if_exist "gcc"
+    check_if_exist "g++"
+    check_if_exist "ld"  "fakeld"
+
+    cd "$cur_dir"
+}
+
+check_if_exist()
+{
+    if [ -x "$1" ]
+    then
+        return
+    fi
+    if [ -e "$1" ]
+    then
+        chmod u+x "$1"
+        return
+    fi
+    if [ -z $2 ]
+    then
+        fakecmd="fakecc"
+    else
+        fakecmd=$2
+    fi
+
+    fullpath=`which $1`
+    if [ -z $fullpath ]
+    then
+        return
+    fi
+
+cat>"$1"<<EOF
+#! /bin/sh
+cmd=$fullpath
+$fakecmd "\$@"
+"\$cmd" "\$@"
+exit \$?
+EOF
+    
+    chmod 755 "$1"
+}
+
+# global constant
+tagsdir="$HOME/.luatags"
+fakebin="$tagsdir/fakebin"
+cur_dir=`pwd`
+
+# check arguments
+cmd="$1"
+if [ -z $cmd ]
+then
+    echo "Nothing to make!"
+    exit 1
+fi
+shift
+args="$@"
+
+# check whether $HOME/.luatags and $HOME/.luatags/fakebin exist.
+check_dir
+
+# check scripts in HOME/.luatags/fakebin.
+check_bin
+
+# add HOME/.luatags/fakebin in front of $PATH
+export PATH="$fakebin:$PATH"
+# set path for fakecc/fakeld to output.
+export FAKEOUTPUT=$cur_dir
+
+echo "$cmd $args"
+$cmd $args
+
