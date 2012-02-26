@@ -1,6 +1,4 @@
 #! /usr/bin/lua
 
-for i = 1, 10 do
-    i = i+1
-    print(i)
-end
+print(arg[-1])
+print(arg[0])

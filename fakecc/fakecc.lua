@@ -1,5 +1,7 @@
 #! /usr/bin/lua
 
+package.path=string.gsub(arg[0], "[^%/]+$", "?.lua;")..package.path
+package.cpath=string.gsub(arg[0], "[^%/]+$", "?.so;")..package.cpath
 require("lfs")
 require("luasql.sqlite3")
 require("tagslib")
