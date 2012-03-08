@@ -66,12 +66,13 @@ install()
         fi
     fi
 
-    cp luabind/luaclang.so $pathbin/
-    cp fakecc/fakecc.lua   $pathbin/fakecc
-    cp fakecc/fakeld.lua   $pathbin/fakeld
-    cp fakecc/fakemake     $pathbin/fakemake
-    cp fakecc/tagslib.so   $pathbin/tagslib.so
-    cp fakecc/test.lua     $pathbin/test.lua
+    cp luabind/luaclang.so       $pathbin/
+    cp fakecc/fakecc.lua         $pathbin/fakecc
+    cp fakecc/fakeld.lua         $pathbin/fakeld
+    cp fakecc/fakemake           $pathbin/fakemake
+    cp fakecc/tagslib.so         $pathbin/tagslib.so
+    cp fakecc/test.lua           $pathbin/test.lua
+    cp fakeparse/fakeparse.lua   $pathbin/fakeparse
 }
 
 
