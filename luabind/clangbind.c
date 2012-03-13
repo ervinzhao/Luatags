@@ -66,6 +66,10 @@ static int bind_getFileTime(lua_State *L)
     return 1;
 }
 
+/*
+ * CXIndex
+ * clang_createIndex (int excludeDeclarationsFromPCH, int displayDiagnostics)
+ */
 static int bind_createIndex(lua_State *L)
 {
     CXIndex index;
@@ -81,6 +85,10 @@ static int bind_createIndex(lua_State *L)
     return 1;
 }
 
+/*
+ * void
+ * clang_disposeIndex (CXIndex index)
+ */
 static int bind_disposeIndex(lua_State *L)
 {
     // TODO:check argument
@@ -109,12 +117,12 @@ static int bind_createTranslationUnitFromSourceFile(lua_State *L)
     const char *filename;
     int  num_cl_args;
     const char *cl_args;
-    unsigned int num_unsaved_files;
-    struct CXUnsavedFile *unsaved_files;
+    unsigned int num_unsaved_files = 0;
+    struct CXUnsavedFile *unsaved_files = NULL;
 
     index = lua_touserdata(L, 1);
     filename = lua_tostring(L, 2);
-    if(args < 4)
+    if(args < 3)
     {
         num_cl_args = 0;
         cl_args = NULL;
@@ -124,7 +132,7 @@ static int bind_createTranslationUnitFromSourceFile(lua_State *L)
         num_cl_args = 1;
         cl_args = lua_tostring(L, 3);
     }
-    if(args < 6)
+    if(args < 5)
     {
         num_unsaved_files = 0;
         unsaved_files = NULL;
@@ -697,6 +705,88 @@ static struct luaL_reg luaclang_type[] =
     {NULL, NULL},
 };
 /* End function bindings for CXType. */
+
+/* {Begin function bindings for CXSourceLocation. */
+
+static int bind_equalLocations(lua_State *L)
+{
+    CXSourceLocation *loc1, *loc2;
+
+    loc1 = luaL_checkudata(L, 1, TYPE_CXSourceLocation);
+    loc2 = luaL_checkudata(L, 2, TYPE_CXSourceLocation);
+
+    unsigned int ret = clang_equalLocations(*loc1, *loc2);
+    if(ret)
+        lua_pushinteger(L, 1);
+    else
+        lua_pushnil(L);
+    return 1;
+}
+
+static int bind_getExpansion(lua_State *L)
+{
+    CXSourceLocation *loc;
+    CXFile file;
+    unsigned int line, column, offset;
+
+    loc = luaL_checkudata(L, 1, TYPE_CXSourceLocation);
+
+    // TODO: we should check whether the location is valid,
+    // to avoid segmention fault.
+    clang_getExpansionLocation(*loc, &file, &line, &column, &offset);
+
+    lua_pushlightuserdata(L, file);
+    help_setudatatype(L, TYPE_CXSourceLocation);
+    lua_pushinteger(L, line);
+    lua_pushinteger(L, column);
+    lua_pushinteger(L, offset);
+    return 4;
+}
+
+static int bind_getPresumed(lua_State *L)
+{
+    CXSourceLocation *loc;
+    CXString filename;
+    unsigned int line, column;
+
+    loc = luaL_checkudata(L, 1, TYPE_CXSourceLocation);
+
+    // TODO: we should check whether the location is valid,
+    // to avoid segmention fault.
+    clang_getPresumedLocation(*loc, &filename, &line, &column);
+
+    lua_pushstring(L, clang_getCString(filename));
+    clang_disposeString(filename);
+    lua_pushinteger(L, line);
+    lua_pushinteger(L, column);
+    return 3;
+}
+
+static int bind_getSpelling(lua_State *L)
+{
+    CXSourceLocation *loc;
+    CXFile file;
+    unsigned int line, column, offset;
+
+    loc = luaL_checkudata(L, 1, TYPE_CXSourceLocation);
+
+    // TODO: we should check whether the location is valid,
+    // to avoid segmention fault.
+    clang_getSpellingLocation(*loc, &file, &line, &column, &offset);
+
+    lua_pushlightuserdata(L, file);
+    help_setudatatype(L, TYPE_CXSourceLocation);
+    lua_pushinteger(L, line);
+    lua_pushinteger(L, column);
+    lua_pushinteger(L, offset);
+    return 4;
+}
+
+static struct luaL_reg luaclang_location[] =
+{
+    {NULL, NULL},
+};
+/* End function bindings for CXSourceLocation. }*/
 
 static void reg_cursor(lua_State *L)
 {
