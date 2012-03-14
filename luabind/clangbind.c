@@ -684,7 +684,9 @@ BIND_Integer__CXType(clang_isPODType, bind_isPODType);
  * long long
  * clang_getNumElements (CXType T)
  */
+
 // TODO:Not Implemented in clang 3.0
+// We just use the newest version of libclang.
 
 /*
  * long long
@@ -702,6 +704,7 @@ static struct luaL_reg luaclang_type[] =
     {"isVolatileQualifiedType",     bind_isVolatileQualifiedType},
     {"isRestrictQualifiedType",     bind_isRestrictQualifiedType},
     {"isPODType",                   bind_isPODType},
+    {"getArraySize",                bind_getArraySize},
     {NULL, NULL},
 };
 /* End function bindings for CXType. */
@@ -735,8 +738,13 @@ static int bind_getExpansion(lua_State *L)
     // to avoid segmention fault.
     clang_getExpansionLocation(*loc, &file, &line, &column, &offset);
 
-    lua_pushlightuserdata(L, file);
-    help_setudatatype(L, TYPE_CXSourceLocation);
+    if(file == NULL)
+        lua_pushnil(L);
+    else
+    {
+        lua_pushlightuserdata(L, file);
+        help_setudatatype(L, TYPE_CXSourceLocation);
+    }
     lua_pushinteger(L, line);
     lua_pushinteger(L, column);
     lua_pushinteger(L, offset);
@@ -755,6 +763,7 @@ static int bind_getPresumed(lua_State *L)
     // to avoid segmention fault.
     clang_getPresumedLocation(*loc, &filename, &line, &column);
 
+    // TODO: should we check the filename?
     lua_pushstring(L, clang_getCString(filename));
     clang_disposeString(filename);
     lua_pushinteger(L, line);
@@ -774,8 +783,13 @@ static int bind_getSpelling(lua_State *L)
     // to avoid segmention fault.
     clang_getSpellingLocation(*loc, &file, &line, &column, &offset);
 
-    lua_pushlightuserdata(L, file);
-    help_setudatatype(L, TYPE_CXSourceLocation);
+    if(file == NULL)
+        lua_pushnil(L);
+    else
+    {
+        lua_pushlightuserdata(L, file);
+        help_setudatatype(L, TYPE_CXSourceLocation);
+    }
     lua_pushinteger(L, line);
     lua_pushinteger(L, column);
     lua_pushinteger(L, offset);
@@ -784,6 +798,10 @@ static int bind_getSpelling(lua_State *L)
 
 static struct luaL_reg luaclang_location[] =
 {
+    {"equal",              bind_equalLocations},
+    {"getExpansion",       bind_getExpansion},
+    {"getPresumed",        bind_getPresumed},
+    {"getSpelling",        bind_getSpelling},
     {NULL, NULL},
 };
 /* End function bindings for CXSourceLocation. }*/
