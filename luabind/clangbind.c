@@ -16,6 +16,8 @@
 #define TYPE_CXType                "CXType"
 #define TYPE_CXToken               "CXToken"
 #define TYPE_CXTranslationUnit     "CXTranslationUnit"
+#define TYPE_CXFile                "CXFile"
+#define TYPE_CXIndex               "CXIndex"
 
 
 static void help_setudatatype(lua_State *L, const char *typename)
@@ -24,43 +26,37 @@ static void help_setudatatype(lua_State *L, const char *typename)
     lua_setmetatable(L, -2);
 }
 
-static int bind_newCXCursor(lua_State *L)
-{
-    //printf("++Stack size: %d\n", lua_gettop(L));
-    CXCursor *userdata = lua_newuserdata(L, sizeof(CXCursor));
-    userdata->kind = 2;
-    
-    
-
-//    luaL_getmetatable(L, TYPE_CXCursor);
-//    lua_setmetatable(L, -2);
-    help_setudatatype(L, TYPE_CXCursor);
-
-    //printf("==Stack size: %d\n", lua_gettop(L));
-    return 1;
-}
-
+/*
+ * CXString
+ * clang_getFileName (CXFile SFile)
+ */
 static int bind_getFileName(lua_State *L)
 {
     CXFile file;
     CXString name;
     
-    file = lua_touserdata(L, 1);
+    file = luaL_checkudata(L, 1, TYPE_CXFile);
 
     name = clang_getFileName(file);
+    lua_settop(L, 0);
 
     lua_pushstring(L, clang_getCString(name));
     return 1;
 }
 
+/*
+ * time_t
+ * clang_getFileTime (CXFile SFile)
+ */
 static int bind_getFileTime(lua_State *L)
 {
     CXFile file;
     time_t mod_time;
 
-    file = lua_touserdata(L, 1);
+    file = luaL_checkudata(L, 1, TYPE_CXFile);
 
     mod_time = clang_getFileTime(file);
+    lua_settop(L, 0);
 
     lua_pushinteger(L, (lua_Integer)mod_time);
     return 1;
@@ -80,8 +76,10 @@ static int bind_createIndex(lua_State *L)
     displayDiagnostics  = luaL_checkint(L, 2);
 
     index = clang_createIndex(excludeDeclarations, displayDiagnostics);
+    lua_settop(L, 0);
 
     lua_pushlightuserdata(L, index);
+    help_setudatatype(L, TYPE_CXIndex);
     return 1;
 }
 
@@ -91,13 +89,12 @@ static int bind_createIndex(lua_State *L)
  */
 static int bind_disposeIndex(lua_State *L)
 {
-    // TODO:check argument
     CXIndex index;
 
-    index = lua_touserdata(L, 1);
+    index = luaL_checkudata(L, 1, TYPE_CXIndex);
 
     clang_disposeIndex(index);
-    return 1;
+    return 0;
 }
 
 /*
@@ -120,7 +117,8 @@ static int bind_createTranslationUnitFromSourceFile(lua_State *L)
     unsigned int num_unsaved_files = 0;
     struct CXUnsavedFile *unsaved_files = NULL;
 
-    index = lua_touserdata(L, 1);
+    // TODO: we need a better implementation.
+    index = luaL_checkudata(L, 1, TYPE_CXIndex);
     filename = lua_tostring(L, 2);
     if(args < 3)
     {
@@ -170,7 +168,7 @@ static int bind_getTUCursor(lua_State *L)
     tu = luaL_checkudata(L, 1, TYPE_CXTranslationUnit);
 
     cursor = clang_getTranslationUnitCursor(tu);
-    lua_pop(L, lua_gettop(L));
+    lua_settop(L, 0);
 
     cursor_p = lua_newuserdata(L, sizeof(CXCursor));
     *cursor_p = cursor;
@@ -258,16 +256,88 @@ static int bind_visitChildren(lua_State *L)
     return 1;
 }
 
+/*
+ * CXSourceLocation
+ * clang_getLocation (CXTranslationUnit tu, CXFile file, unsigned line, unsigned column)
+ */
+static int bind_getLocation(lua_State *L)
+{
+    CXTranslationUnit tu;
+    CXSourceLocation loc, *loc_p;
+    CXFile file;
+    unsigned int line, column;
+    
+    tu = luaL_checkudata(L, 1, TYPE_CXTranslationUnit);
+    file = luaL_checkudata(L, 2, TYPE_CXFile);
+    line = luaL_checkint(L, 3);
+    column = luaL_checkint(L, 4);
+
+    loc = clang_getLocation(tu, file, line, column);
+
+    lua_settop(L, 0);
+    loc_p = lua_newuserdata(L, sizeof(CXSourceLocation));
+    *loc_p = loc;
+    help_setudatatype(L, TYPE_CXSourceLocation);
+    return 1;
+}
+
+/*
+ * CXSourceLocation
+ * clang_getLocationForOffset (CXTranslationUnit tu, CXFile file, unsigned offset)
+ */
+static int bind_getLocationForOffset(lua_State *L)
+{
+    CXTranslationUnit tu;
+    CXSourceLocation loc, *loc_p;
+    CXFile file;
+    unsigned int offset;
+
+    tu = luaL_checkudata(L, 1, TYPE_CXTranslationUnit);
+    file = luaL_checkudata(L, 2, TYPE_CXFile);
+    offset = luaL_checkint(L, 3);
+
+    loc = clang_getLocationForOffset(tu, file, offset);
+
+    lua_settop(L, 0);
+    loc_p = lua_newuserdata(L, sizeof(CXSourceLocation));
+    *loc_p = loc;
+    help_setudatatype(L, TYPE_CXSourceLocation);
+    return 1;
+}
+
+/*
+ * CXCursor
+ * clang_getCursor (CXTranslationUnit, CXSourceLocation)
+ */
+static int bind_getCursor(lua_State *L)
+{
+    CXTranslationUnit tu;
+    CXSourceLocation *loc_p;
+    
+    tu = luaL_checkudata(L, 1, TYPE_CXTranslationUnit);
+    loc_p = luaL_checkudata(L, 2, TYPE_CXSourceLocation);
+
+    CXCursor cursor = clang_getCursor(tu, *loc_p);
+    lua_settop(L, 0);
+        
+    CXCursor *cursor_p = lua_newuserdata(L, sizeof(CXCursor));
+    *cursor_p = cursor;
+    help_setudatatype(L, TYPE_CXCursor);
+    return 1;
+}
+
 static struct luaL_reg luaclang[] =
 {
-    {"newcursor",              bind_newCXCursor},
-    {"getFileName",            bind_getFileName},
-    {"getFileTime",            bind_getFileTime},
-    {"createIndex",            bind_createIndex},
-    {"disposeIndex",           bind_disposeIndex},
-    {"createTUFromSourceFile", bind_createTranslationUnitFromSourceFile},
-    {"visitChildren",          bind_visitChildren},
-    {"getTUCursor",            bind_getTUCursor},
+    {"getFileName",              bind_getFileName},
+    {"getFileTime",              bind_getFileTime},
+    {"createIndex",              bind_createIndex},
+    {"disposeIndex",             bind_disposeIndex},
+    {"createTUFromSourceFile",   bind_createTranslationUnitFromSourceFile},
+    {"visitChildren",            bind_visitChildren},
+    {"getTUCursor",              bind_getTUCursor},
+    {"getLocation",              bind_getLocation},
+    {"getLocationForOffset",     bind_getLocationForOffset},
+    {"getCursor",                bind_getCursor},
     {NULL, NULL},
 };
 
@@ -286,6 +356,7 @@ static int bind_getCursorKind(lua_State *L)
 
     kind = clang_getCursorKind(*cursor_p);
 
+    lua_settop(L, 1);
     lua_pushinteger(L, kind);
     return 1;
 }
@@ -303,6 +374,7 @@ static int bind_cursor_isNULL(lua_State *L)
 
     ret = clang_Cursor_isNull(*cursor_p);
 
+    lua_settop(L, 0);
     lua_pushboolean(L, ret);
     return 1;
 }
@@ -322,6 +394,7 @@ static int bind_equalCursors(lua_State *L)
 
     ret = clang_equalCursors(*cursor_p1, *cursor_p2);
 
+    lua_settop(L, 0);
     lua_pushboolean(L, ret);
     return 1;
 }
@@ -339,6 +412,7 @@ static int bind_getCursorLocation(lua_State *L)
 
     loc = clang_getCursorLocation(*cursor_p);
     
+    lua_settop(L, 0);
     loc_p = lua_newuserdata(L, sizeof(CXSourceLocation));
     *loc_p = loc;
     help_setudatatype(L, TYPE_CXSourceLocation);
@@ -358,6 +432,7 @@ static int bind_getCursorType(lua_State *L)
 
     type = clang_getCursorType(*cursor_p);
 
+    lua_settop(L, 0);
     type_p = lua_newuserdata(L, sizeof(CXType));
     *type_p = type;
     help_setudatatype(L, TYPE_CXType);
@@ -377,6 +452,7 @@ static int bind_Cursor_getTranslationUnit(lua_State *L)
 
     tu = clang_Cursor_getTranslationUnit(*cursor_p);
 
+    lua_settop(L, 0);
     if(tu == NULL)
         lua_pushnil(L);
     else
@@ -398,6 +474,7 @@ static int bind_getCursorDisplayName(lua_State *L)
 
     cursor_p = luaL_checkudata(L, 1, TYPE_CXCursor);
 
+    lua_settop(L, 0);
     name = clang_getCursorDisplayName(*cursor_p);
     lua_pushstring(L, clang_getCString(name));
     clang_disposeString(name);
@@ -416,6 +493,8 @@ static int bind_getCursorSpelling(lua_State *L)
     cursor_p = luaL_checkudata(L, 1, TYPE_CXCursor);
 
     name = clang_getCursorSpelling(*cursor_p);
+
+    lua_settop(L, 0);
     lua_pushstring(L, clang_getCString(name));
     clang_disposeString(name);
     return 1;
@@ -434,6 +513,7 @@ static int bind_getCursorReferenced(lua_State *L)
 
     cursor = clang_getCursorReferenced(*cursor_p);
 
+    lua_settop(L, 0);
     cursor_p = lua_newuserdata(L, sizeof(CXCursor));
     *cursor_p = cursor;
     help_setudatatype(L, TYPE_CXCursor);
@@ -453,6 +533,7 @@ static int bind_getCursorDefinition(lua_State *L)
 
     cursor = clang_getCursorDefinition(*cursor_p);
 
+    lua_settop(L, 0);
     cursor_p = lua_newuserdata(L, sizeof(CXCursor));
     *cursor_p = cursor;
     help_setudatatype(L, TYPE_CXCursor);
@@ -471,6 +552,7 @@ static int bind_isCursorDefinition(lua_State *L)
     cursor_p = luaL_checkudata(L, 1, TYPE_CXCursor);
 
     ret = clang_isCursorDefinition(*cursor_p);
+    lua_settop(L, 0);
     lua_pushinteger(L, ret);
     return 1;
 }
@@ -488,6 +570,7 @@ static int bind_getCanonicalCursor(lua_State *L)
 
     cursor = clang_getCanonicalCursor(*cursor_p);
 
+    lua_settop(L, 0);
     cursor_p = lua_newuserdata(L, sizeof(CXCursor));
     *cursor_p = cursor;
     help_setudatatype(L, TYPE_CXCursor);
@@ -506,6 +589,8 @@ static int bind_getCursorUSR(lua_State *L)
     cursor_p = luaL_checkudata(L, 1, TYPE_CXCursor);
 
     name = clang_getCursorSpelling(*cursor_p);
+
+    lua_settop(L, 0);
     lua_pushstring(L, clang_getCString(name));
     clang_disposeString(name);
     return 1;
@@ -593,6 +678,7 @@ static int fun_bind(lua_State *L)\
     \
     r_type = fun_clang(*type_p);\
     \
+    lua_settop(L, 0);\
     type_p = lua_newuserdata(L, sizeof(CXType));\
     *type_p = r_type;\
     help_setudatatype(L, TYPE_CXType);\
@@ -609,6 +695,7 @@ static int fun_bind(lua_State *L)\
     \
     ret = fun_clang(*type_p);\
     \
+    lua_settop(L, 0);\
     lua_pushinteger(L, ret);\
     return 1;\
 }
@@ -719,6 +806,8 @@ static int bind_equalLocations(lua_State *L)
     loc2 = luaL_checkudata(L, 2, TYPE_CXSourceLocation);
 
     unsigned int ret = clang_equalLocations(*loc1, *loc2);
+    
+    lua_settop(L, 0);
     if(ret)
         lua_pushinteger(L, 1);
     else
@@ -738,6 +827,7 @@ static int bind_getExpansion(lua_State *L)
     // to avoid segmention fault.
     clang_getExpansionLocation(*loc, &file, &line, &column, &offset);
 
+    lua_settop(L, 0);
     if(file == NULL)
         lua_pushnil(L);
     else
@@ -764,6 +854,7 @@ static int bind_getPresumed(lua_State *L)
     clang_getPresumedLocation(*loc, &filename, &line, &column);
 
     // TODO: should we check the filename?
+    lua_settop(L, 0);
     lua_pushstring(L, clang_getCString(filename));
     clang_disposeString(filename);
     lua_pushinteger(L, line);
@@ -783,6 +874,7 @@ static int bind_getSpelling(lua_State *L)
     // to avoid segmention fault.
     clang_getSpellingLocation(*loc, &file, &line, &column, &offset);
 
+    lua_settop(L, 0);
     if(file == NULL)
         lua_pushnil(L);
     else
