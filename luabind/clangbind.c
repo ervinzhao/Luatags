@@ -18,6 +18,28 @@
 #define TYPE_CXTranslationUnit     "CXTranslationUnit"
 #define TYPE_CXFile                "CXFile"
 #define TYPE_CXIndex               "CXIndex"
+#define TYPE_CXSourceRange         "CXSourceRange"
+
+/*
+ * CXCursor
+ * clang_function (CXCursor)
+ */
+#define BIND_CXCursor__CXCursor(fun_clang, fun_bind)\
+static int fun_bind(lua_State *L)\
+{\
+    CXCursor *cursor_p;\
+    CXCursor cursor;\
+\
+    cursor_p = luaL_checkudata(L, 1, TYPE_CXCursor);\
+\
+    cursor = clang_getCursorReferenced(*cursor_p);\
+\
+    lua_settop(L, 0);\
+    cursor_p = lua_newuserdata(L, sizeof(CXCursor));\
+    *cursor_p = cursor;\
+    help_setudatatype(L, TYPE_CXCursor);\
+    return 1;\
+}
 
 
 static void help_setudatatype(lua_State *L, const char *typename)
@@ -600,21 +622,13 @@ static int bind_getCursorUSR(lua_State *L)
  * CXCursor
  * clang_getCursorSemanticParent (CXCursor cursor);
  */
-static int bind_getCursorSemanticParent(lua_State *L)
-{
-    // TODO:
-    return 1;
-}
+BIND_CXCursor__CXCursor(clang_getCursorSemanticParent, bind_getCursorSemanticParent)
 
 /*
  * CXCursor
  * clang_getCursorLexicalParent (CXCursor);
  */ 
-static int bind_getCursorLexicalParent(lua_State *L)
-{
-    // TODO:
-    return 1;
-}
+BIND_CXCursor__CXCursor(clang_getCursorLexicalParent, bind_getCursorLexicalParent)
 
 /*
  * CXType
@@ -622,16 +636,37 @@ static int bind_getCursorLexicalParent(lua_State *L)
  */
 static int bind_getTypedefDeclUnderlyingType(lua_State *L)
 {
-    // NOT suppored in clang 3.0
+    CXCursor *cursor_p;
+    CXType type, *type_p;
+
+    cursor_p = luaL_checkudata(L, 1, TYPE_CXType);
+
+    type = clang_getCursorType(*cursor_p);
+
+    lua_settop(L, 0);
+    type_p = lua_newuserdata(L, sizeof(CXType));
+    *type_p = type;
+    help_setudatatype(L, TYPE_CXType);
     return 1;
 }
+
 /*
  * CXType
  * clang_getEnumDeclIntegerType (CXCursor C)
  * */
 static int bind_getEnumDeclIntegerType(lua_State *L)
 {
-    // NOT suppored in clang 3.0
+    CXCursor *cursor_p;
+    CXType type, *type_p;
+
+    cursor_p = luaL_checkudata(L, 1, TYPE_CXType);
+
+    type = clang_getCursorType(*cursor_p);
+
+    lua_settop(L, 0);
+    type_p = lua_newuserdata(L, sizeof(CXType));
+    *type_p = type;
+    help_setudatatype(L, TYPE_CXType);
     return 1;
 }
 
@@ -641,33 +676,48 @@ static int bind_getEnumDeclIntegerType(lua_State *L)
  */
 static int bind_getEnumConstantDeclValue(lua_State *L)
 {
-    // NOT suppored in clang 3.0
+    CXCursor *cursor_p;
+    long long ret;
+
+    cursor_p = luaL_checkudata(L, 1, TYPE_CXCursor);
+
+    ret = clang_getEnumConstantDeclValue(*cursor_p);
+
+    lua_settop(L, 0);
+    lua_pushinteger(L, ret);
     return 1;
 }
 
 static struct luaL_reg luaclang_cursor[] =
 {
-    {"getKind",                bind_getCursorKind},
-    {"getType",                bind_getCursorType},
-    {"getLocation",            bind_getCursorLocation},
-    {"isNull",                 bind_cursor_isNULL},
-    {"equal",                  bind_equalCursors},
-    {"getDisplayName",         bind_getCursorDisplayName},
-    {"getSpelling",            bind_getCursorSpelling},
-    {"getReferenced",          bind_getCursorReferenced},
-    {"getDefinition",          bind_getCursorDefinition},
-    {"isDefinition",           bind_isCursorDefinition},
-    {"getCanonical",           bind_getCanonicalCursor},
-    {"getUSR",                 bind_getCursorUSR},
-    {"getSemanticParent",      bind_getCursorSemanticParent},
-    {"getLexicalParent",       bind_getCursorLexicalParent},
-    {"getTranslationUnit",     bind_Cursor_getTranslationUnit},
+    {"getKind",                         bind_getCursorKind},
+    {"getType",                         bind_getCursorType},
+    {"getLocation",                     bind_getCursorLocation},
+    {"isNull",                          bind_cursor_isNULL},
+    {"equal",                           bind_equalCursors},
+    {"getDisplayName",                  bind_getCursorDisplayName},
+    {"getSpelling",                     bind_getCursorSpelling},
+    {"getReferenced",                   bind_getCursorReferenced},
+    {"getDefinition",                   bind_getCursorDefinition},
+    {"isDefinition",                    bind_isCursorDefinition},
+    {"getCanonical",                    bind_getCanonicalCursor},
+    {"getUSR",                          bind_getCursorUSR},
+    {"getSemanticParent",               bind_getCursorSemanticParent},
+    {"getLexicalParent",                bind_getCursorLexicalParent},
+    {"getTypedefDeclUnderlyingType",    bind_getTypedefDeclUnderlyingType},
+    {"getEnumDeclIntegerType",          bind_getEnumDeclIntegerType},
+    {"getEnumConstantDeclValue",        bind_getEnumConstantDeclValue},
+    {"getTranslationUnit",              bind_Cursor_getTranslationUnit},
     {NULL, NULL},
 };
 /* End function bindings for CXCursor. */
 
 /* Function bindings for CXType. */
 
+/*
+ * CXType
+ * clang_function (CXType)
+ */
 #define BIND_CXType__CXType(fun_clang, fun_bind)\
 static int fun_bind(lua_State *L)\
 {\
@@ -685,6 +735,10 @@ static int fun_bind(lua_State *L)\
     return 1;\
 }
 
+/*
+ * unsigned
+ * clang_function (CXType)
+ */
 #define BIND_Integer__CXType(fun_clang, fun_bind)\
 static int fun_bind(lua_State *L)\
 {\
@@ -723,7 +777,7 @@ BIND_CXType__CXType(clang_getResultType, bind_getResultType);
  * clang_getElementType (CXType T)
  */
 // TODO:Not Implemented in clang 3.0
-// BIND_CXType__CXType(clang_getElementType, bind_getElementType);
+ BIND_CXType__CXType(clang_getElementType, bind_getElementType);
 
 /*
  * CXType
@@ -753,13 +807,13 @@ BIND_Integer__CXType(clang_isRestrictQualifiedType, bind_isRestrictQualifiedType
  * unsigned
  * clang_getNumArgTypes (CXType T)
  */
-// TODO:Not Implemented in clang 3.0
+BIND_Integer__CXType(clang_getNumArgTypes, bind_getNumArgTypes);
 
 /*
  * unsigned
  * clang_isFunctionTypeVariadic (CXType T)
  */
-// TODO:Not Implemented in clang 3.0
+BIND_Integer__CXType(clang_isFunctionTypeVariadic, bind_isFunctionTypeVariadic);
 
 /*
  * unsigned
@@ -771,6 +825,7 @@ BIND_Integer__CXType(clang_isPODType, bind_isPODType);
  * long long
  * clang_getNumElements (CXType T)
  */
+BIND_Integer__CXType(clang_getNumElements, bind_getNumElements);
 
 // TODO:Not Implemented in clang 3.0
 // We just use the newest version of libclang.
@@ -781,17 +836,44 @@ BIND_Integer__CXType(clang_isPODType, bind_isPODType);
  */
 BIND_Integer__CXType(clang_getArraySize, bind_getArraySize);
 
+/*
+ * CXType
+ * clang_getArgType (CXType T, unsigned i)
+ */
+static int bind_getArgType(lua_State *L)
+{
+    CXType *type_p;
+    CXType r_type;
+    unsigned int i;
+    
+    type_p = luaL_checkudata(L, 1, TYPE_CXType);
+    i = luaL_checkint(L, 2);
+    
+    r_type = clang_getArgType(*type_p, i);
+    
+    lua_settop(L, 0);
+    type_p = lua_newuserdata(L, sizeof(CXType));
+    *type_p = r_type;
+    help_setudatatype(L, TYPE_CXType);
+    return 1;
+}
+
 static struct luaL_reg luaclang_type[] =
 {
     {"getCanonicalType",            bind_getCanonicalType},
     {"getPointeeType",              bind_getPointeeType},
     {"getResultType",               bind_getResultType},
+    {"getElementType",              bind_getElementType},
     {"getArrayElementType",         bind_getArrayElementType},
     {"isConstQualifiedType",        bind_isConstQualifiedType},
     {"isVolatileQualifiedType",     bind_isVolatileQualifiedType},
     {"isRestrictQualifiedType",     bind_isRestrictQualifiedType},
+    {"getNumArgTypes",              bind_getNumArgTypes},
+    {"isFunctionTypeVariadic",      bind_isFunctionTypeVariadic},
     {"isPODType",                   bind_isPODType},
+    {"getNumElements",              bind_getNumElements},
     {"getArraySize",                bind_getArraySize},
+    {"getArgType",                  bind_getArgType},
     {NULL, NULL},
 };
 /* End function bindings for CXType. */
@@ -908,8 +990,8 @@ static void reg_cursor(lua_State *L)
     lua_settable(L, -3);
     luaL_register(L, NULL, luaclang_cursor);
 
-    luaL_newmetatable(L, TYPE_CXString);
-    lua_pop(L, 1);
+    //luaL_newmetatable(L, TYPE_CXString);
+    //lua_pop(L, 1);
 
     luaL_newmetatable(L, TYPE_CXSourceLocation);
     lua_pop(L, 1);
@@ -925,9 +1007,25 @@ static void reg_cursor(lua_State *L)
 
     luaL_newmetatable(L, TYPE_CXTranslationUnit);
     lua_pop(L, 1);
+
+    luaL_newmetatable(L, TYPE_CXFile);
+    lua_pop(L, 1);
+
+    luaL_newmetatable(L, TYPE_CXIndex);
+    lua_pop(L, 1);
+
+    luaL_newmetatable(L, TYPE_CXSourceLocation);
+    lua_pushstring(L, "__index");
+    lua_pushvalue(L, -2);
+    lua_settable(L, -3);
+    luaL_register(L, NULL, luaclang_location);
+
+    luaL_newmetatable(L, TYPE_CXSourceRange);
+    lua_pop(L, 1);
     //TODO: many type to be registered.
     
 }
+
 static void reg_cursorkind(lua_State *L)
 {
     int i = 1;
