@@ -22,7 +22,8 @@ single_usefull = help.set{
     "-fsigned-bitfields", "-fsigned-char", "-funsigned-bitfields", "-funsigned-char",
 }
 double_usefull = help.set{
-    "-Xpreprocessor", "-Xassembler", "-specs"
+    "-Xpreprocessor", "-Xassembler", "-specs",
+    "-MF", "-MT", "-MQ"
 }
 double_useless = help.set{
     "-aux-info", "-T", "-Xlinker", "-wrapper"
@@ -45,7 +46,7 @@ function parse_joined_arg(str)
         if argname == string.sub(str, 1, len) then
             ifjsarg = true
             ifusefull = true
-            if string.len(str) == len then
+            if string.len(str) ~= len then
                 ifjoined = true
             end
             break
@@ -57,7 +58,7 @@ function parse_joined_arg(str)
         if argname == string.sub(str, 1, len) then
             ifjsarg = true
             ifusefull = nil
-            if string.len(str) == len then
+            if string.len(str) ~= len then
                 ifjoined = true
             end
             break
@@ -83,6 +84,7 @@ function parse_arguments()
             argument = argument..arg[i].." "
         elseif double_usefull[arg[i]] == true then
             argument = argument..arg[i].." "..arg[i+1].." "
+            i = i+1
         elseif double_useless[arg[i]] == true then
             i = i+1
         else
@@ -95,7 +97,7 @@ function parse_arguments()
                         argument = argument..arg[i+1].." "
                     end
                 end
-                if joined == nil then
+                if ifjoined == nil then
                     i = i+1
                 end
             else
@@ -189,6 +191,12 @@ function parse_and_write(conn)
             outfile = string.gsub(file, "%.[%a]", outmode)
         end
 
+        -- TODO:Got a nil filerpath, maybe a bug.
+        -- Wrong handling for output file
+        -- We shouldn't get output files here,
+        -- something must go wrong.
+        -- Bug fixed, but we should do something to ensure
+        -- filerpath isn't nil.
         local sqldel = string.format(
             "delete from args where filename='%s'", filerpath)
         ret, err = conn:execute(sqldel)
