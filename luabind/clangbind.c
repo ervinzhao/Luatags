@@ -575,7 +575,10 @@ static int bind_isCursorDefinition(lua_State *L)
 
     ret = clang_isCursorDefinition(*cursor_p);
     lua_settop(L, 0);
-    lua_pushinteger(L, ret);
+    if(ret == 0)
+        lua_pushnil(L);
+    else
+        lua_pushinteger(L, ret);
     return 1;
 }
 
@@ -915,7 +918,7 @@ static int bind_getExpansion(lua_State *L)
     else
     {
         lua_pushlightuserdata(L, file);
-        help_setudatatype(L, TYPE_CXSourceLocation);
+        help_setudatatype(L, TYPE_CXFile);
     }
     lua_pushinteger(L, line);
     lua_pushinteger(L, column);
@@ -962,7 +965,7 @@ static int bind_getSpelling(lua_State *L)
     else
     {
         lua_pushlightuserdata(L, file);
-        help_setudatatype(L, TYPE_CXSourceLocation);
+        help_setudatatype(L, TYPE_CXFile);
     }
     lua_pushinteger(L, line);
     lua_pushinteger(L, column);
@@ -1037,6 +1040,7 @@ static void reg_cursorkind(lua_State *L)
     LUA_ENUM(L, "EnumDecl", i++);
     LUA_ENUM(L, "FieldDecl", i++);
     LUA_ENUM(L, "EnumConstantDecl", i++);
+    LUA_ENUM(L, "FunctionDecl", i++);
     LUA_ENUM(L, "VarDecl", i++);
     LUA_ENUM(L, "ParmDecl", i++);
     LUA_ENUM(L, "ObjCInterfaceDecl", i++);
