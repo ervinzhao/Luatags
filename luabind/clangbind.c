@@ -48,6 +48,18 @@ static void help_setudatatype(lua_State *L, const char *typename)
     lua_setmetatable(L, -2);
 }
 
+static void help_pushlightudata(lua_State *L, void *ptr)
+{
+    void **addr = lua_newuserdata(L, sizeof(void *));
+    *addr = ptr;
+}
+
+static void *help_checklightudata(lua_State *L, int pos, const char *typename)
+{
+    void **addr = luaL_checkudata(L, pos, typename);
+    return *addr;
+}
+
 /*
  * CXString
  * clang_getFileName (CXFile SFile)
@@ -57,12 +69,13 @@ static int bind_getFileName(lua_State *L)
     CXFile file;
     CXString name;
     
-    file = luaL_checkudata(L, 1, TYPE_CXFile);
+    file = help_checklightudata(L, 1, TYPE_CXFile);
 
     name = clang_getFileName(file);
     lua_settop(L, 0);
 
     lua_pushstring(L, clang_getCString(name));
+    clang_disposeString(name);
     return 1;
 }
 
@@ -75,7 +88,7 @@ static int bind_getFileTime(lua_State *L)
     CXFile file;
     time_t mod_time;
 
-    file = luaL_checkudata(L, 1, TYPE_CXFile);
+    file = help_checklightudata(L, 1, TYPE_CXFile);
 
     mod_time = clang_getFileTime(file);
     lua_settop(L, 0);
@@ -100,7 +113,7 @@ static int bind_createIndex(lua_State *L)
     index = clang_createIndex(excludeDeclarations, displayDiagnostics);
     lua_settop(L, 0);
 
-    lua_pushlightuserdata(L, index);
+    help_pushlightudata(L, index);
     help_setudatatype(L, TYPE_CXIndex);
     return 1;
 }
@@ -113,9 +126,23 @@ static int bind_disposeIndex(lua_State *L)
 {
     CXIndex index;
 
-    index = luaL_checkudata(L, 1, TYPE_CXIndex);
+    index = help_checklightudata(L, 1, TYPE_CXIndex);
 
     clang_disposeIndex(index);
+    return 0;
+}
+
+/*
+ * void
+ * clang_disposeTranslationUnit (CXTranslationUnit)
+ */
+static int bind_disposeTU(lua_State *L)
+{
+    CXTranslationUnit tu;
+
+    tu = help_checklightudata(L, 1, TYPE_CXTranslationUnit);
+
+    clang_disposeTranslationUnit(tu);
     return 0;
 }
 
@@ -140,7 +167,7 @@ static int bind_createTranslationUnitFromSourceFile(lua_State *L)
     struct CXUnsavedFile *unsaved_files = NULL;
 
     // TODO: we need a better implementation.
-    index = luaL_checkudata(L, 1, TYPE_CXIndex);
+    index = help_checklightudata(L, 1, TYPE_CXIndex);
     filename = lua_tostring(L, 2);
     if(args < 3)
     {
@@ -171,7 +198,7 @@ static int bind_createTranslationUnitFromSourceFile(lua_State *L)
         lua_pushnil(L);
     else
     {
-        lua_pushlightuserdata(L, tu);
+        help_pushlightudata(L, tu);
         help_setudatatype(L, TYPE_CXTranslationUnit);
     }
     return 1;
@@ -187,7 +214,7 @@ static int bind_getTUCursor(lua_State *L)
     CXCursor cursor, *cursor_p;
 
     // tu = lua_touserdata(L, 1);
-    tu = luaL_checkudata(L, 1, TYPE_CXTranslationUnit);
+    tu = help_checklightudata(L, 1, TYPE_CXTranslationUnit);
 
     cursor = clang_getTranslationUnitCursor(tu);
     lua_settop(L, 0);
@@ -249,7 +276,7 @@ static enum CXChildVisitResult visitCallback(CXCursor cursor, CXCursor parent, C
         lua_rawgeti(L, LUA_REGISTRYINDEX, arg_ref[i]);
         luaL_unref(L, LUA_REGISTRYINDEX, arg_ref[i]);
     }
-
+    free(arg_ref);
     return ret;
 }
 /*
@@ -289,8 +316,8 @@ static int bind_getLocation(lua_State *L)
     CXFile file;
     unsigned int line, column;
     
-    tu = luaL_checkudata(L, 1, TYPE_CXTranslationUnit);
-    file = luaL_checkudata(L, 2, TYPE_CXFile);
+    tu = help_checklightudata(L, 1, TYPE_CXTranslationUnit);
+    file = help_checklightudata(L, 2, TYPE_CXFile);
     line = luaL_checkint(L, 3);
     column = luaL_checkint(L, 4);
 
@@ -314,8 +341,8 @@ static int bind_getLocationForOffset(lua_State *L)
     CXFile file;
     unsigned int offset;
 
-    tu = luaL_checkudata(L, 1, TYPE_CXTranslationUnit);
-    file = luaL_checkudata(L, 2, TYPE_CXFile);
+    tu = help_checklightudata(L, 1, TYPE_CXTranslationUnit);
+    file = help_checklightudata(L, 2, TYPE_CXFile);
     offset = luaL_checkint(L, 3);
 
     loc = clang_getLocationForOffset(tu, file, offset);
@@ -336,7 +363,7 @@ static int bind_getCursor(lua_State *L)
     CXTranslationUnit tu;
     CXSourceLocation *loc_p;
     
-    tu = luaL_checkudata(L, 1, TYPE_CXTranslationUnit);
+    tu = help_checklightudata(L, 1, TYPE_CXTranslationUnit);
     loc_p = luaL_checkudata(L, 2, TYPE_CXSourceLocation);
 
     CXCursor cursor = clang_getCursor(tu, *loc_p);
@@ -354,6 +381,7 @@ static struct luaL_reg luaclang[] =
     {"getFileTime",              bind_getFileTime},
     {"createIndex",              bind_createIndex},
     {"disposeIndex",             bind_disposeIndex},
+    {"disposeTU",                bind_disposeTU},
     {"createTUFromSourceFile",   bind_createTranslationUnitFromSourceFile},
     {"visitChildren",            bind_visitChildren},
     {"getTUCursor",              bind_getTUCursor},
@@ -470,7 +498,7 @@ static int bind_Cursor_getTranslationUnit(lua_State *L)
     CXCursor *cursor_p;
     CXTranslationUnit tu;
     
-    cursor_p = luaL_checkudata(L, 1, TYPE_CXTranslationUnit);
+    cursor_p = help_checklightudata(L, 1, TYPE_CXTranslationUnit);
 
     tu = clang_Cursor_getTranslationUnit(*cursor_p);
 
@@ -479,7 +507,7 @@ static int bind_Cursor_getTranslationUnit(lua_State *L)
         lua_pushnil(L);
     else
     {
-        lua_pushlightuserdata(L, tu);
+        help_pushlightudata(L, tu);
         help_setudatatype(L, TYPE_CXTranslationUnit);
     }
     return 1;
@@ -613,7 +641,7 @@ static int bind_getCursorUSR(lua_State *L)
 
     cursor_p = luaL_checkudata(L, 1, TYPE_CXCursor);
 
-    name = clang_getCursorSpelling(*cursor_p);
+    name = clang_getCursorUSR(*cursor_p);
 
     lua_settop(L, 0);
     lua_pushstring(L, clang_getCString(name));
@@ -917,7 +945,7 @@ static int bind_getExpansion(lua_State *L)
         lua_pushnil(L);
     else
     {
-        lua_pushlightuserdata(L, file);
+        help_pushlightudata(L, file);
         help_setudatatype(L, TYPE_CXFile);
     }
     lua_pushinteger(L, line);
@@ -964,7 +992,7 @@ static int bind_getSpelling(lua_State *L)
         lua_pushnil(L);
     else
     {
-        lua_pushlightuserdata(L, file);
+        help_pushlightudata(L, file);
         help_setudatatype(L, TYPE_CXFile);
     }
     lua_pushinteger(L, line);
