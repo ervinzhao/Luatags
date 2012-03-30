@@ -1,11 +1,11 @@
 all:luabind/clangbind.c
 	make -C luabind
-	make -C fakecc
+	make -C script
 
 .PHONY:clean
 clean:
 	rm luabind/luaclang.so
-	rm fakecc/tagslib.so
+	rm script/tagslib.so
 
 .PHONY:install
 install:

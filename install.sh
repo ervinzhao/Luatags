@@ -9,19 +9,19 @@ check_build()
         echo "luabind/luaclang.so doesn't exist."
         exit 1
     fi
-    if [ ! -f fakecc/fakemake ]
+    if [ ! -f script/fakemake ]
     then
-        echo "fakecc/fakemake doesn't exist."
+        echo "script/fakemake doesn't exist."
         exit 1
     fi
-    if [ ! -f fakecc/fakecc.lua ]
+    if [ ! -f script/fakecc.lua ]
     then
-        echo "fakecc/fakecc.lua doesn't exist."
+        echo "script/fakecc.lua doesn't exist."
         exit 1
     fi
-    if [ ! -f fakecc/fakeld.lua ]
+    if [ ! -f script/fakeld.lua ]
     then
-        echo "fakecc/fakeld.lua doesn't exist."
+        echo "script/fakeld.lua doesn't exist."
         exit 1
     fi
 }
