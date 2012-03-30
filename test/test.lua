@@ -3,7 +3,7 @@
 require("luaclang")
 
 function tu_visitor(cursor, parent)
-    print(cursor:getSpelling())
+--    print(cursor:getSpelling())
     return clang.visitor.continue
 end
 
