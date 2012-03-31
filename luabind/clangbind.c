@@ -1102,7 +1102,8 @@ static void reg_cursorkind(lua_State *L)
     LUA_ENUM(L, "CXXAccessSpecifier", i++);
     LUA_ENUM(L, "FirstDecl", CXCursor_UnexposedDecl);
     LUA_ENUM(L, "LastDecl", CXCursor_CXXAccessSpecifier);
-    i = 40;
+
+    i = CXCursor_FirstRef;
     LUA_ENUM(L, "FirstRef", i);
     LUA_ENUM(L, "ObjCSuperClassRef", i++);
     LUA_ENUM(L, "ObjCProtocolRef", i++);
@@ -1116,9 +1117,20 @@ static void reg_cursorkind(lua_State *L)
     LUA_ENUM(L, "OverloadedDeclRef", i++);
     LUA_ENUM(L, "LastRef", CXCursor_OverloadedDeclRef);
 
-    i = 70;
+    i = CXCursor_FirstInvalid;
     LUA_ENUM(L, "FirstInvalid", i);
     LUA_ENUM(L, "InvalidFile", i++);
+    LUA_ENUM(L, "NoDeclFound", i++);
+    LUA_ENUM(L, "NotImplemented", i++);
+    LUA_ENUM(L, "InvalidCode", i++);
+
+    i = CXCursor_MacroDefinition;
+    LUA_ENUM(L, "MacroDefinition", i++);
+    LUA_ENUM(L, "MacroExpansion", i++);
+    LUA_ENUM(L, "MacroInstantiation", i++);
+    LUA_ENUM(L, "InclusionDirective", i++);
+    LUA_ENUM(L, "FirstPreprocessing", i++);
+    LUA_ENUM(L, "LastPreprocessing", i++);
 
     lua_setfield(L, -2, "cursorkind");
 }
