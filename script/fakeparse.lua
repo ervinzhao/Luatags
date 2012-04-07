@@ -6,13 +6,11 @@ require("lfs")
 require("luasql.sqlite3")
 require("tagslib")
 require("luaclang")
---require("test")
+
 
 
 sqlenv = luasql.sqlite3()
 
-function parse_args()
-end
 
 if work_dir == nil then
     work_dir = lfs.currentdir()
@@ -22,6 +20,44 @@ argdb_path = work_dir.."/.luatags/args.db"
 tagdb_path_save = work_dir.."/.luatags/tags.db"
 --tagdb_path = ":memory:"
 tagdb_path = "/tmp/tags.db"
+single_file = nil
+use_memory_db = nil
+no_parse = nil
+print_tags = nil
+debug_info = nil
+
+--[[
+--file:    Parse single file.
+--output:  Output database file.
+--memory:  Use memory database of sqlite.
+--no-parse:Don't parse source files.
+--print-tags: Print tags to file 'tags' in current direcroty.
+]]--
+function parse_args()
+    local count = table.maxn(arg)
+    local i = 1
+    while i <= count do
+        if arg[i] == "--file" then
+            single_file = arg[i+1]
+            i = i+1
+        elseif arg[i] == "--output" then
+            tagdb_path = arg[i+1]
+            i = i+1
+        elseif arg[i] == "--memory" then
+            use_memory_db = true
+        elseif arg[i] == "--no-parse" then
+            no_parse = true
+        elseif arg[i] == "--print-tags" then
+            print_tags = true
+        elseif arg[i] == "--debug" then
+            debug_info = true
+        end
+        i = i+1
+    end
+end
+
+parse_args()
+
 
 
 argdb_conn, err = sqlenv:connect(argdb_path)
@@ -61,13 +97,23 @@ function update_tag(tag, tag_conn)
         return
     end
 
-    local result = cur:fetch();
+    if debug_info then
+        local debug = string.format("name: %s\tfile: %s\tusr: %s\tkind: %s", tag.name, tag.file, tag.usr, tag.kind)
+        print(debug)
+    end
+
+    local result = {}
+    result = cur:fetch(result);
     local update_sql = nil
     if result ~= nil then
-        if result[1] == "decl" then
+        if debug_info then
+            print("result kind: "..result[3])
+        end
+
+        if result[3] == "decl" then
             if tag.kind == "define" then
                 update_sql = string.format(
-                [[update symbols name='%s',kind='%s',type='%s',parent='%s',file='%s',line=%d
+                [[update symbols set name='%s',kind='%s',type='%s',parent='%s',file='%s',line=%d
                 where usr='%s']],
                 tag.name, tag.kind, tag.type, tag.parent, tag.file, tag.line, tag.usr);
             end
@@ -98,6 +144,7 @@ function parse_visitor(cursor, parent, fileinfo, tag_conn)
         or kind == clang.cursorkind.FunctionDecl
         or kind == clang.cursorkind.VarDecl
         or kind == clang.cursorkind.TypedefDecl
+        or kind == clang.cursorkind.MacroDefinition
         then
         tag.name = cursor:getSpelling()
         local def
@@ -125,7 +172,7 @@ function parse_visitor(cursor, parent, fileinfo, tag_conn)
             --print("USR:"..def:getUSR())
             tag.file = ""
         else
-            tag.file = clang.getFileName(tag.file)
+            tag.file = tagslib.realpath(clang.getFileName(tag.file))
         end
         update_tag(tag, tag_conn)
     end
@@ -222,7 +269,52 @@ function parse_all_files(arg_conn, tag_conn)
     --print(attach)
     --attach_db:execute(attach)
 end
-parse_all_files(argdb_conn, tagdb_conn)
+
+function parse_single_file(arg_conn, tag_conn, filename)
+    local sql = string.format("select * from args where filename='%s'", filename)
+    local cursor = arg_conn:execute(sql)
+
+    prepare_tagdb(tag_conn)
+    local result = {}
+    result = cursor:fetch(result)
+    if result == nil then
+        print("No such file.")
+        os.exit()
+    end
+    parse_file(result, tag_conn)
+
+    cursor:close()
+end
+
+function print_tags_file(tag_conn)
+    local sql = string.format([[select name,kind,type,file,line from symbols where name<>"" order by name]])
+    local cursor = tag_conn:execute(sql)
+    local tag_file = io.open("tags", "w+")
+    tag_file:write("!_TAG_FILE_SORTED\t1\t\n")
+
+    local result = {}
+    result = cursor:fetch(result)
+    while result ~= nil do
+        tag_file:write(result[1].."\t"..result[4].."\t"..result[5]..";\n")
+
+        result = cursor:fetch(result)
+    end
+
+    cursor:close()
+end
+
+if no_parse == nil then
+    if single_file then
+        parse_single_file(argdb_conn, tagdb_conn, single_file)
+    else
+        parse_all_files(argdb_conn, tagdb_conn)
+    end
+end
+
+if print_tags then
+    print_tags_file(tagdb_conn)
+end
+
 argdb_conn:close()
 tagdb_conn:close()
 
