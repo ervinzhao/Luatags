@@ -1124,13 +1124,15 @@ static void reg_cursorkind(lua_State *L)
     LUA_ENUM(L, "NotImplemented", i++);
     LUA_ENUM(L, "InvalidCode", i++);
 
+    i = CXCursor_PreprocessingDirective;
+    LUA_ENUM(L, "PreprocessingDirective", i);
     i = CXCursor_MacroDefinition;
     LUA_ENUM(L, "MacroDefinition", i++);
     LUA_ENUM(L, "MacroExpansion", i++);
-    LUA_ENUM(L, "MacroInstantiation", i++);
-    LUA_ENUM(L, "InclusionDirective", i++);
-    LUA_ENUM(L, "FirstPreprocessing", i++);
-    LUA_ENUM(L, "LastPreprocessing", i++);
+    LUA_ENUM(L, "MacroInstantiation", CXCursor_MacroExpansion);
+    LUA_ENUM(L, "InclusionDirective", CXCursor_InclusionDirective);
+    LUA_ENUM(L, "FirstPreprocessing", CXCursor_FirstPreprocessing);
+    LUA_ENUM(L, "LastPreprocessing", CXCursor_LastPreprocessing);
 
     lua_setfield(L, -2, "cursorkind");
 }
