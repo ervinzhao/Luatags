@@ -18,6 +18,7 @@ end
 
 argdb_path = work_dir.."/.luatags/args.db"
 tagdb_path_save = work_dir.."/.luatags/tags.db"
+memory_path = ":memory:"
 --tagdb_path = ":memory:"
 tagdb_path = "/tmp/tags.db"
 single_file = nil
@@ -62,9 +63,16 @@ parse_args()
 
 argdb_conn, err = sqlenv:connect(argdb_path)
 if argdb_conn == nil then
-    print("Can not open args.db:")
-    print(err)
-    os.exit(1)
+    if debug_info then
+        argdb_conn = sqlenv:connect(memory_path)
+        argdb_conn:execute([[create table if not exists args
+        (filename varchar(1024) primary key, dir varchar(1024),
+        argument varchar(1024), output varchar(1024))]])
+    else
+        print("Can not open args.db:")
+        print(err)
+        os.exit(1)
+    end
 end
 local cursor = argdb_conn:execute([[
 select count(*) from sqlite_master where type='table' and name='args'
@@ -78,10 +86,14 @@ end
 
 tagdb_conn, err = sqlenv:connect(tagdb_path)
 if tagdb_conn == nil then
-    print("Can not open tags.db:")
-    print(err)
-    argdb_conn:close()
-    os.exit(1)
+    if debug_info then
+        tagdb_conn = sqlenv:connect(memory_path)
+    else
+        print("Can not open tags.db:")
+        print(err)
+        argdb_conn:close()
+        os.exit(1)
+    end
 end
 
 function update_tag(tag, tag_conn)
@@ -175,6 +187,10 @@ function parse_visitor(cursor, parent, fileinfo, tag_conn)
             tag.file = tagslib.realpath(clang.getFileName(tag.file))
         end
         update_tag(tag, tag_conn)
+    end
+
+    if kind == clang.cursorkind.Namespace then
+        return clang.visitor.recurse
     end
 
     if kind == clang.cursorkind.UnexposedDecl then
@@ -271,7 +287,7 @@ function parse_all_files(arg_conn, tag_conn)
 end
 
 function parse_single_file(arg_conn, tag_conn, filename)
-    local sql = string.format("select * from args where filename='%s'", filename)
+    local sql = string.format("select filename,dir,argument,output from args where filename='%s'", filename)
     local cursor = arg_conn:execute(sql)
 
     prepare_tagdb(tag_conn)
@@ -279,9 +295,16 @@ function parse_single_file(arg_conn, tag_conn, filename)
     result = cursor:fetch(result)
     if result == nil then
         print("No such file.")
-        os.exit()
+        print("Use default arguments.")
+        result = {}
+        result[1] = filename
+        result[2] = "."
+        result[3] = ""
+        parse_file(result, tag_conn)
+        --os.exit()
+    else
+        parse_file(result, tag_conn)
     end
-    parse_file(result, tag_conn)
 
     cursor:close()
 end
