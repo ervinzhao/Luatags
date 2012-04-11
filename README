@@ -1,0 +1,25 @@
+Luatags is a project that uses libclang and lua to parse C/C++ source code.
+
+
+Dependencies
+To build an running luatags, we need:
+*make/gcc
+*clang >= 3.1
+*lua 5.1.4
+*sqlite3
+*lua-sql-sqlite3
+*lua-filesystem
+
+
+How to Install
+$make
+$make install
+This will install luatags to $HOME/luatags.
+
+
+How to Use
+Use `fakemake make` instead `make` to build a project, fakemake script will
+collect information in building process. All the collected information are 
+stored into .luatags/args.db which is a sqlite db file.
+Then use `fakeparse --print-tags` to parse the source code and generate tags
+file.
