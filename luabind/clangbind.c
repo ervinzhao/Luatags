@@ -32,7 +32,7 @@ static int fun_bind(lua_State *L)\
 \
     cursor_p = luaL_checkudata(L, 1, TYPE_CXCursor);\
 \
-    cursor = clang_getCursorReferenced(*cursor_p);\
+    cursor = fun_clang(*cursor_p);\
 \
     lua_settop(L, 0);\
     cursor_p = lua_newuserdata(L, sizeof(CXCursor));\
