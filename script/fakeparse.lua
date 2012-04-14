@@ -125,15 +125,16 @@ function update_tag(tag, tag_conn)
         if result[3] == "decl" then
             if tag.kind == "define" then
                 update_sql = string.format(
-                [[update symbols set name='%s',kind='%s',type='%s',parent='%s',file='%s',line=%d
+                [[update symbols set name='%s',membername='%s',kind='%s',type='%s',parent='%s',file='%s',line=%d
                 where usr='%s']],
-                tag.name, tag.kind, tag.type, tag.parent, tag.file, tag.line, tag.usr);
+                tag.name, tag.member, tag.kind, tag.type, tag.parent, tag.file, tag.line, tag.usr);
             end
         end
     else
         update_sql = string.format(
-        [[insert into symbols values('%s', '%s', '%s', '%s', '%s', '%s', '%d')]],
-        tag.usr, tag.name, tag.kind, tag.type, tag.parent, tag.file, tag.line)
+        [[insert into symbols (usr, name, membername, kind, type, parent, file, line)
+        values('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d')]],
+        tag.usr, tag.name, tag.member, tag.kind, tag.type, tag.parent, tag.file, tag.line)
     end
 
     cur:close()
@@ -152,6 +153,7 @@ function parse_visitor(cursor, parent, fileinfo, tag_conn)
         or kind == clang.cursorkind.UnionDecl
         or kind == clang.cursorkind.ClassDecl
         or kind == clang.cursorkind.EnumDecl
+        or kind == clang.cursorkind.FieldDecl
         or king == clang.cursorkind.EnumConstantDecl
         or kind == clang.cursorkind.FunctionDecl
         or kind == clang.cursorkind.VarDecl
@@ -161,12 +163,10 @@ function parse_visitor(cursor, parent, fileinfo, tag_conn)
         tag.name = cursor:getSpelling()
         local def
         if cursor:isDefinition() then
-            -- tag.line = 
             def = cursor
             tag.kind = "define"
         else
             def = cursor:getDefinition()
-            --return clang.visitor.continue
             if def:isNull() then
                 tag.kind = "decl"
                 def = cursor
@@ -186,10 +186,28 @@ function parse_visitor(cursor, parent, fileinfo, tag_conn)
         else
             tag.file = tagslib.realpath(clang.getFileName(tag.file))
         end
+
+        if kind == clang.cursorkind.FieldDecl
+            or kind == clang.cursorkind.CXXMethod then
+            tag.member = tag.name
+            tag.name = ""
+        else
+            tag.member = ""
+        end
+
+
         update_tag(tag, tag_conn)
     end
 
-    if kind == clang.cursorkind.Namespace then
+
+    if kind == clang.cursorkind.Namespace
+        or kind == clang.cursorkind.StructDecl
+        or kind == clang.cursorkind.UnionDecl
+        or kind == clang.cursorkind.EnumDecl then
+        if debug_info then
+            print("Parent of "..cursor:getSpelling())
+            print(cursor:getSemanticParent():getSpelling())
+        end
         return clang.visitor.recurse
     end
 
@@ -257,7 +275,7 @@ end
 
 function prepare_tagdb(tag_conn)
     tag_conn:execute([[create table if not exists symbols
-    (usr varchar(1024) primary key, name varchar(1024),
+    (usr varchar(1024) primary key, name varchar(1024), membername varchar(1024),
     kind char(16), type char(16),
     parent varchar(1024), file varchar(1024), line int)]])
 end
