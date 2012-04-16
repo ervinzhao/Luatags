@@ -67,8 +67,10 @@ install()
     fi
 
     cp luabind/luaclang.so       $pathbin/
+    cp luabind/luaposix.so       $pathbin/
     cp script/fakecc.lua         $pathbin/fakecc
     cp script/fakeld.lua         $pathbin/fakeld
+    cp script/fakedaemon.lua     $pathbin/fakedaemon
     cp script/fakemake           $pathbin/fakemake
     cp script/tagslib.so         $pathbin/tagslib.so
     cp script/test.lua           $pathbin/test.lua
