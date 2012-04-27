@@ -71,10 +71,13 @@ install()
     cp script/fakecc.lua         $pathbin/fakecc
     cp script/fakeld.lua         $pathbin/fakeld
     cp script/fakedaemon.lua     $pathbin/fakedaemon
+    cp script/fakedaemonexit.lua $pathbin/fakedaemonexit
     cp script/fakemake           $pathbin/fakemake
     cp script/tagslib.so         $pathbin/tagslib.so
     cp script/test.lua           $pathbin/test.lua
     cp script/fakeparse.lua   $pathbin/fakeparse
+
+    chmod u+x $pathbin/fakedaemonexit
 }
 
 
