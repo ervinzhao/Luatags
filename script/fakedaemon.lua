@@ -5,13 +5,14 @@ package.cpath=string.gsub(arg[0], "[^%/]+$", "?.so;")..package.cpath
 require("lfs")
 require("luasql.sqlite3")
 require("tagslib")
---require("luaclang")
 require("luaposix")
 require("json")
 
 
 sqlenv = luasql.sqlite3()
 fifo_path = "/tmp/luatags"
+db_file_path = nil
+db_tmp_path = "/tmp/args.db"
 
 if posix.access(fifo_path, "f") then
     os.remove(fifo_path)
@@ -48,8 +49,13 @@ function prepare_db_file()
         lfs.mkdir(tagspath)
     end
 
-    --local dbpath = tagspath.."/args.db"
-    local dbpath = "/tmp/tags.db"
+    db_file_path = tagspath.."/args.db"
+    local dbpath = db_tmp_path
+    
+    if posix.access(db_file_path, "r") then
+        os.rename(db_file_path, db_tmp_path)
+    end
+
     local conn = sqlenv:connect(dbpath)
     if conn == nil then
         print("Error: can not open database.")
@@ -86,30 +92,31 @@ function handle_arguments(argument, conn)
     end
 end
 
-function handle_msg(msg, conn)
+
+function handle_msg(msg, conn) 
     local msg_table = json.decode(msg)
-    if msg_table == nil then
+    if msg_table == nil then 
         print("Error: bad message:\t", msg)
-        return 
+        return true 
     end
     if msg_table.cmd == "exit" then
         conn:close()
-        print("fakedaemon exit normally.")
-        os.exit()
+        return nil
     end
     if msg_table.cmd == "argument" then
         handle_arguments(msg_table, conn)
     end
+    return true
 end
 
 function main_loop(fd, conn)
     local last_msg
     while true do
         local msg, err
+        local ret
         msg, err = posix.read(fd, 512)
         if string.len(msg) == 0 then
             posix.sleep(1)
-            print(msg, "=================")
         elseif msg ~= nil then
             if last_msg ~= nil then
                 msg = last_msg..msg
@@ -118,7 +125,7 @@ function main_loop(fd, conn)
             local last_pos = string.find(msg, "\0")
             if last_pos ~= nil then
                 local msg_json = string.sub(msg, 1, last_pos-1)
-                handle_msg(msg_json, conn)
+                ret = handle_msg(msg_json, conn)
                 last_msg = string.sub(msg, last_pos+1, -1)
             else
                 last_msg = msg
@@ -127,14 +134,31 @@ function main_loop(fd, conn)
         else
             print("oooooooooooooo")
         end
+        if ret == nil then
+            return
+        end
     end
 end
 
-fifo, err = posix.open(fifo_path, {"RDWR"})
+function do_atexit(fifo, fifo_wr, conn)
+    conn:close()
+    posix.close(fifo)
+    posix.close(fifo_wr)
+    os.execute("mv "..db_tmp_path.." "..db_file_path)
+    os.remove(fifo_path)
+    print("fakedaemon exit normally.")
+end
+
+fifo, err = posix.open(fifo_path, {"RDONLY"})
 if fifo ~= nil then
+    fifo_wr, err = posix.open(fifo_path, {"WRONLY"})
+    if fifo_wr == nil then
+        print(err)
+    end
     local conn = prepare_db_file()
     prepare_db_table(conn)
     main_loop(fifo, conn)
+    do_atexit(fifo, fifo_wr, conn)
 else
     print("Error: open fifo failed!")
     print(err)
