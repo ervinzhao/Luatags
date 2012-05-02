@@ -96,6 +96,41 @@ if tagdb_conn == nil then
     end
 end
 
+function get_kind_string(kind)
+    for key, value in pairs(clang.cursorkind) do
+        if value == kind then
+            return key
+        end
+    end
+    return ""
+end
+
+function get_type_string(kind_string)
+    if kind_string == "ClassDecl" then
+        return "c"
+    elseif kind_string == "MacroDefinition" then
+        return "d"
+    elseif kind_string == "EnumConstantDecl" then
+        return "e"
+    elseif kind_string == "FunctionDecl"
+        or kind_string == "CXXMethod" then
+        return "f"
+    elseif kind_string == "EnumDecl" then
+        return "g"
+    elseif kind_string == "FieldDecl" then
+        return "m"
+    elseif kind_string == "StructDecl" then
+        return "s"
+    elseif kind_string == "TypedefDecl" then
+        return "t"
+    elseif kind_string == "UnionDecl" then
+        return "u"
+    elseif kind_string == "VarDecl" then
+        return "v"
+    end
+    return ""
+end
+
 function update_tag(tag, tag_conn)
     if tag.usr == "" then
         print("No USR, give up.")
@@ -110,7 +145,8 @@ function update_tag(tag, tag_conn)
     end
 
     if debug_info then
-        local debug = string.format("name: %s\tfile: %s\tusr: %s\tkind: %s", tag.name, tag.file, tag.usr, tag.kind)
+        local debug = string.format("name: %s\tmember: %s\tfile: %s\tusr: %s\tkind: %s\ttype: %s",
+            tag.name, tag.member, tag.file, tag.usr, tag.kind, tag.type)
         print(debug)
     end
 
@@ -177,7 +213,7 @@ function parse_visitor(cursor, parent, fileinfo, tag_conn)
         tag.usr = def:getUSR()
         local loc = def:getLocation()
         tag.file, tag.line, tag.column = loc:getExpansion()
-        tag.type = ""
+        tag.type = get_kind_string(kind)
         tag.parent = def:getSemanticParent():getSpelling()
         if tag.file == nil then
             --print(tag.name.."\t"..clang.getFileName(tag.file).."\t"..tostring(tag.line)..";")
@@ -187,18 +223,17 @@ function parse_visitor(cursor, parent, fileinfo, tag_conn)
             tag.file = tagslib.realpath(clang.getFileName(tag.file))
         end
 
-        if kind == clang.cursorkind.FieldDecl
-            or kind == clang.cursorkind.CXXMethod then
+        if kind == clang.cursorkind.FieldDecl then
             tag.member = tag.name
             tag.name = ""
+        elseif kind == clang.cursorkind.CXXMethod then
+            tag.member = tag.name
         else
             tag.member = ""
         end
 
-
         update_tag(tag, tag_conn)
     end
-
 
     if kind == clang.cursorkind.Namespace
         or kind == clang.cursorkind.StructDecl
@@ -210,6 +245,7 @@ function parse_visitor(cursor, parent, fileinfo, tag_conn)
         end
         return clang.visitor.recurse
     end
+
 
     if kind == clang.cursorkind.UnexposedDecl then
     elseif kind == clang.cursorkind.StructDecl then
@@ -276,7 +312,7 @@ end
 function prepare_tagdb(tag_conn)
     tag_conn:execute([[create table if not exists symbols
     (usr varchar(1024) primary key, name varchar(1024), membername varchar(1024),
-    kind char(16), type char(16),
+    kind char(16), type char(32),
     parent varchar(1024), file varchar(1024), line int)]])
 end
 
@@ -336,12 +372,23 @@ function print_tags_file(tag_conn)
     local result = {}
     result = cursor:fetch(result)
     while result ~= nil do
-        tag_file:write(result[1].."\t"..result[4].."\t"..result[5]..";\n")
+        --tag_file:write(result[1].."\t"..result[4].."\t"..result[5]..";\n")
+        local tag_str = result[1].."\t"..result[4].."\t"..result[5]
+        tag_str = tag_str..";\""
 
+        local type_string = get_type_string(result[3])
+        if type_string ~= "" then
+            tag_str = tag_str.."\t".."kind:"..type_string
+        end
+        tag_str = tag_str.."\n"
+
+        print(tag_str)
+        tag_file:write(tag_str)
         result = cursor:fetch(result)
     end
 
     cursor:close()
+    tag_file:close()
 end
 
 if no_parse == nil then
@@ -352,7 +399,9 @@ if no_parse == nil then
     end
 end
 
+lfs.chdir(work_dir)
 if print_tags then
+    print("Print tags file!")
     print_tags_file(tagdb_conn)
 end
 
