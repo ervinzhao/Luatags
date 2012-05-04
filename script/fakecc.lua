@@ -5,6 +5,8 @@ package.cpath=string.gsub(arg[0], "[^%/]+$", "?.so;")..package.cpath
 require("lfs")
 require("luasql.sqlite3")
 require("tagslib")
+require("luaposix")
+require("json")
 
 sqlenv = luasql.sqlite3()
 
@@ -146,18 +148,17 @@ function parse_arguments()
     return infiles, argument, outfile, outmode
 end
 
-function parse_and_write(conn)
-
-    -- make sure the table "args" exist.
-    local ret, err = 
-    conn:execute([[create table if not exists args
-    (filename varchar(1024) primary key, dir varchar(1024),
-    argument varchar(1024), output varchar(1024))]])
+function write_to_fifo(msg, fifo)
+    msg.cmd = "argument"
+    local msg_str = json.encode(msg)
+    msg_str = msg_str.."\0"
+    local ret = posix.write(fifo, msg_str)
     if ret == nil then
-        print(err)
-        return 1
+        print("Error: write to fifo failed.")
     end
+end
 
+function parse_and_write(fifo)
 
     -- table of all input files
     local infiles = {}
@@ -181,72 +182,41 @@ function parse_and_write(conn)
 
     for key, file in pairs(infiles) do
         local filerpath = tagslib.realpath(file)
-        if filerpath == nil then
-            infiles[key] = nil
-        else
-            infiles[key] = filerpath
-        end
+        infiles[key] = filerpath
 
         if outfile == nil then
             outfile = string.gsub(file, "%.[%a]", outmode)
         end
 
-        -- TODO:Got a nil filerpath, maybe a bug.
-        -- Wrong handling for output file
-        -- We shouldn't get output files here,
-        -- something must go wrong.
-        -- Bug fixed, but we should do something to ensure
-        -- filerpath isn't nil.
-        local sqldel = string.format(
-            "delete from args where filename='%s'", filerpath)
-        ret, err = conn:execute(sqldel)
-        print(sqldel)
-        local sqlstr = string.format(
-            "insert into args values('%s', '%s', '%s', '%s')",
-            filerpath, dir, argument, outfile)
-        ret, err = conn:execute(sqlstr)
-        print(sqlstr)
-        if ret == nil then
-            print("Error:", err)
-        end
+        local msg = {}
+        msg.filerpath = filerpath
+        msg.argument  = argument
+        msg.dir       = dir
+        msg.outfile   = outfile
+        write_to_fifo(msg, fifo)
+
     end
     return 0
 end
 
+function prepare_fifo()
+    local fifo_path = "/tmp/luatags"
+    if posix.access(fifo_path, "f") then
+        local fifo = posix.open(fifo_path, {"WRONLY"})
+        return fifo
+    end
+    return nil
+end
+
 function main()
-    local outpath = os.getenv("FAKEOUTPUT")
-    if outpath == nil then
-        print("Error: bad path to output.")
-        os.exit(1)
+    local fifo = prepare_fifo()
+    if fifo == nil then
+        print("Error: can not open fifo file.")
+        os.exit(-1)
     end
 
-    local pathmod = lfs.attributes(outpath, "mode")
-    if pathmod ~= "directory" then
-        print("Error: path is not a directory.")
-        os.exit(1)
-    end
-
-    -- make sure ".luatags" exist.
-    local tagspath = outpath.."/.luatags"
-    local tagsmod  = lfs.attributes(tagspath, "mode")
-    if tagsmod ~= nil then
-        if tagsmod ~= "directory" then
-            os.remove(tagspath)
-            lfs.mkdir(tagspath)
-        end
-    else
-        lfs.mkdir(tagspath)
-    end
-
-    local dbpath = tagspath.."/args.db"
-    local conn = sqlenv:connect(dbpath)
-    if conn == nil then
-        print("Error: can not open database.")
-        os.exit(1)
-    end
-
-    local ret = parse_and_write(conn)
-    conn:close()
+    local ret = parse_and_write(fifo)
+    posix.close(fifo)
     return ret
 end
 

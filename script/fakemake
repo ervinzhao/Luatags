@@ -87,6 +87,11 @@ export PATH="$fakebin:$PATH"
 # set path for fakecc/fakeld to output.
 export FAKEOUTPUT=$cur_dir
 
+echo "Start fakedaemon..."
+fakedaemon &
 echo "$cmd $args"
 $cmd $args
+
+echo "Stop fakedaemon..."
+fakedaemonexit "/tmp/luatags"
 
