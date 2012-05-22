@@ -9,6 +9,7 @@ To build an running luatags, we need:
 *sqlite3
 *lua-sql-sqlite3
 *lua-filesystem
+*lua-json
 
 
 How to Install
