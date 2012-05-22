@@ -719,6 +719,23 @@ static int bind_getEnumConstantDeclValue(lua_State *L)
     return 1;
 }
 
+/*
+ * CXLinkageKind
+ * clang_getCursorLinkage (CXCursor cursor)
+ */
+static int bind_getCursorLinkage(lua_State *L)
+{
+    CXCursor *cursor_p;
+    int ret;
+
+    cursor_p = luaL_checkudata(L, 1, TYPE_CXCursor);
+    ret = clang_getEnumConstantDeclValue(*cursor_p);
+
+    lua_settop(L, 0);
+    lua_pushinteger(L, ret);
+    return 1;
+}
+
 static struct luaL_reg luaclang_cursor[] =
 {
     {"getKind",                         bind_getCursorKind},
@@ -739,6 +756,7 @@ static struct luaL_reg luaclang_cursor[] =
     {"getEnumDeclIntegerType",          bind_getEnumDeclIntegerType},
     {"getEnumConstantDeclValue",        bind_getEnumConstantDeclValue},
     {"getTranslationUnit",              bind_Cursor_getTranslationUnit},
+    {"getLinkage",                      bind_getCursorLinkage},
     {NULL, NULL},
 };
 /* End function bindings for CXCursor. */
@@ -1179,6 +1197,19 @@ static void reg_typekind(lua_State *L)
     lua_setfield(L, -2, "typekind");
 }
 
+static void reg_linkage(lua_State *L)
+{
+    int i = 0;
+    lua_newtable(L);
+    LUA_ENUM(L, "invalid", i++);
+    LUA_ENUM(L, "nolinkage", i++);
+    LUA_ENUM(L, "internal", i++);
+    LUA_ENUM(L, "unique", i++);
+    LUA_ENUM(L, "external", i);
+
+    lua_setfield(L, -2, "linkage");
+}
+
 void reg_visitresult(lua_State *L)
 {
     int i = CXChildVisit_Break;
@@ -1198,5 +1229,6 @@ int luaopen_luaclang(lua_State* L)
     reg_cursorkind(L);
     reg_typekind(L);
     reg_visitresult(L);
+    reg_linkage(L);
     return 1;
 }
