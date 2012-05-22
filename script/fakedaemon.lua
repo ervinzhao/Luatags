@@ -122,14 +122,17 @@ function main_loop(fd, conn)
                 msg = last_msg..msg
                 last_msg = nil
             end
-            local last_pos = string.find(msg, "\0")
-            if last_pos ~= nil then
-                local msg_json = string.sub(msg, 1, last_pos-1)
-                ret = handle_msg(msg_json, conn)
-                last_msg = string.sub(msg, last_pos+1, -1)
-            else
-                last_msg = msg
-                msg = nil
+            while msg ~= nil do
+                local last_pos = string.find(msg, "\0")
+                if last_pos ~= nil then
+                    local msg_json = string.sub(msg, 1, last_pos-1)
+                    ret = handle_msg(msg_json, conn)
+                    last_msg = string.sub(msg, last_pos+1, -1)
+                    msg = last_msg
+                else
+                    last_msg = msg
+                    msg = nil
+                end
             end
         else
             print("oooooooooooooo")
@@ -154,6 +157,7 @@ if fifo ~= nil then
     fifo_wr, err = posix.open(fifo_path, {"WRONLY"})
     if fifo_wr == nil then
         print(err)
+        exit(-1)
     end
     local conn = prepare_db_file()
     prepare_db_table(conn)
