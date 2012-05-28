@@ -68,7 +68,7 @@ function prepare_db_table(conn)
     -- make sure the table "args" exist.
     local ret, err = 
     conn:execute([[create table if not exists args
-    (filename varchar(1024) primary key, dir varchar(1024),
+    (filename varchar(1024) primary key, filetype varchar(16), dir varchar(1024),
     argument varchar(1024), output varchar(1024))]])
     if ret == nil then
         print(err)
@@ -82,9 +82,12 @@ function handle_arguments(argument, conn)
         "delete from args where filename='%s'", argument.filerpath)
     local ret, err = conn:execute(sqldel)
     print(sqldel)
+    if argument.filetype == nil then
+        argument.filetype = ""
+    end
     local sqlstr = string.format(
-        "insert into args values('%s', '%s', '%s', '%s')",
-        argument.filerpath, argument.dir, argument.argument, argument.outfile)
+        "insert into args values('%s', '%s', '%s', '%s', '%s')",
+        argument.filerpath, argument.filetype, argument.dir, argument.argument, argument.outfile)
     ret, err = conn:execute(sqlstr)
     print(sqlstr)
     if ret == nil then
@@ -113,7 +116,7 @@ function main_loop(fd, conn)
     local last_msg
     while true do
         local msg, err
-        local ret
+        local ret = true
         msg, err = posix.read(fd, 512)
         if string.len(msg) == 0 then
             posix.sleep(1)

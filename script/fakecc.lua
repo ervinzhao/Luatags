@@ -158,6 +158,37 @@ function write_to_fifo(msg, fifo)
     end
 end
 
+function get_filetype(filepath)
+    local unknown = "other"
+    local filename = string.reverse(filepath)
+    local name_end = string.find(filename, "/")
+    filename = string.sub(filename, 1, name_end)
+    local ex_end = string.find(filename, ".")
+    if ex_end == nil then
+        return unknown
+    end
+    local ex_name = string.sub(filename, 1, ex_end)
+    ex_name = string.reverse(ex_name)
+    if ex_name == "h" or ex_name == "hpp" then
+        return "header"
+    end
+    if ex_name == "c"
+        or ex_name == "cxx"
+        or ex_name == "cpp" then
+        return "source"
+    end
+    if ex_name == "o" then
+        return "object"
+    end
+    if ex_name == "a" then
+        return "static-lib"
+    end
+    if ex_name == "so" then
+        return "dynamic-lib"
+    end
+    return unknown
+end
+
 function parse_and_write(fifo)
 
     -- table of all input files
@@ -190,6 +221,7 @@ function parse_and_write(fifo)
 
         local msg = {}
         msg.filerpath = filerpath
+        msg.filetype  = get_filetype(filerpath)
         msg.argument  = argument
         msg.dir       = dir
         msg.outfile   = outfile

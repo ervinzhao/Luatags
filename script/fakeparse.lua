@@ -75,7 +75,7 @@ if argdb_conn == nil then
     end
 end
 local cursor = argdb_conn:execute([[
-select count(*) from sqlite_master where type='table' and name='args'
+select count(*) from sqlite_master where type='table' and name='args' and filetype='source'
 ]])
 if tonumber(cursor:fetch()) ~= 1 then
     print("Table args does not exist.")
@@ -286,10 +286,7 @@ function parse_file(fileinfo, tag_conn)
     if lfs.attributes(fileinfo[1]) == nil then
         return nil
     end
-    if not(string.format(fileinfo[1], "%.c$")
-        or string.format(fileinfo[1], "%.cpp$")
-        or string.format(fileinfo[1], "%.cxx$")) then
-    end
+
 	print("Filename:"..fileinfo[1])
     print("File dir:"..fileinfo[2])
 
