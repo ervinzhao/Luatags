@@ -6,7 +6,9 @@ require("lfs")
 require("luasql.sqlite3")
 require("tagslib")
 require("luaclang")
-
+require("luaposix")
+require("json")
+require("std")
 
 
 sqlenv = luasql.sqlite3()
@@ -16,16 +18,14 @@ if work_dir == nil then
     work_dir = lfs.currentdir()
 end
 
-argdb_path = work_dir.."/.luatags/args.db"
-tagdb_path_save = work_dir.."/.luatags/tags.db"
-memory_path = ":memory:"
---tagdb_path = ":memory:"
-tagdb_path = "/tmp/tags.db"
-single_file = nil
-use_memory_db = nil
-no_parse = nil
-print_tags = nil
-debug_info = nil
+g_config = {}
+g_config.db_files = "/.luatags/args.db"
+g_config.db_refs  = "/.luatags/tags.db"    
+
+config = {}
+config.current_dir = lfs.currentdir()
+--config.memory_path = ":memory:"
+--tagdb_path = "/tmp/tags.db"
 
 --[[
 --file:    Parse single file.
@@ -35,65 +35,151 @@ debug_info = nil
 --print-tags: Print tags to file 'tags' in current direcroty.
 ]]--
 function parse_args()
+    local options = {}
+    options.jobs = 4
+    options.table_max = 512
     local count = table.maxn(arg)
     local i = 1
     while i <= count do
         if arg[i] == "--file" then
-            single_file = arg[i+1]
+            options.single_file = arg[i+1]
             i = i+1
         elseif arg[i] == "--output" then
-            tagdb_path = arg[i+1]
+            options.tagdb_path = arg[i+1]
             i = i+1
         elseif arg[i] == "--memory" then
-            use_memory_db = true
+            options.use_memory_db = true
         elseif arg[i] == "--no-parse" then
-            no_parse = true
+            options.no_parse = true
         elseif arg[i] == "--print-tags" then
-            print_tags = true
+            options.print_tags = true
         elseif arg[i] == "--debug" then
-            debug_info = true
+            options.debug_info = true
+        elseif arg[i] == "--no-file-db" then
+            options.no_file_db = true
+        elseif arg[i] == "--source-dir" then
+            options.source_dir = arg[i+1]
+            i = i+1
+        elseif arg[i] == "--target-dir" then
+            options.target_dir= arg[i+1]
+            i = i+1
+        --[[elseif arg[i] == "--build-dir" then
+            options.build_dir = arg[i+1] 
+            i = i+1]]--
         end
         i = i+1
     end
+    return options
 end
 
-parse_args()
-
-
-
-argdb_conn, err = sqlenv:connect(argdb_path)
-if argdb_conn == nil then
-    if debug_info then
-        argdb_conn = sqlenv:connect(memory_path)
-        argdb_conn:execute([[create table if not exists args
-        (filename varchar(1024) primary key, dir varchar(1024),
-        argument varchar(1024), output varchar(1024))]])
-    else
-        print("Can not open args.db:")
-        print(err)
+function setup_path(config, options)
+    if options.source_dir == nil and options.target_dir == nil then
+        print("Error :Source directory or target directory must be set.")
+        os.exit(1)
+    elseif options.target_dir == nil then
+        options.target_dir = options.source_dir
+    end
+    if lfs.attributes(options.target_dir, "mode") ~= "directory" then
+        print("Error :")
         os.exit(1)
     end
-end
-local cursor = argdb_conn:execute([[
-select count(*) from sqlite_master where type='table' and name='args' and filetype='source'
-]])
-if tonumber(cursor:fetch()) ~= 1 then
-    print("Table args does not exist.")
-    os.exit(1)
-else
-    cursor:close()
-end
-
-tagdb_conn, err = sqlenv:connect(tagdb_path)
-if tagdb_conn == nil then
-    if debug_info then
-        tagdb_conn = sqlenv:connect(memory_path)
-    else
-        print("Can not open tags.db:")
-        print(err)
-        argdb_conn:close()
+    if options.source_dir ~= nil
+        and lfs.attributes(options.source_dir, "mode") ~= "directory" then
+        print("Error :")
         os.exit(1)
     end
+    config.db_refs  = options.target_dir..g_config.db_refs
+    if options.no_file_db == nil then
+        config.db_files = options.target_dir..g_config.db_files
+        if not posix.access(config.db_files, "r") then
+            print("Error :Could not find file database.")
+            print("Path :", config.db_files)
+            os.exit(1)
+        end
+    elseif options.source_dir == nil then
+        print("Error :Source directory must be set when use --no-file-db option.")
+        os.exit(1)
+    end
+
+end
+
+function prepare_files(parse_info, files_info)
+    if options.no_file_db == nil then
+        local conn
+        local err
+        conn, err = sqlenv:connect(config.db_files)
+        if conn == nil then
+            print("Error :Could not open file database.")
+            os.exit(1)
+        end
+        local cursor, err = conn:execute([[
+        select count(*) from sqlite_master where type='table' and name='args'
+        ]])
+        print(err)
+        if tonumber(cursor:fetch()) ~= 1 then
+            print("Error :Table args does not exist in file database.")
+            os.exit(1)
+        end
+        cursor = conn:execute([[select filename,filetype,dir,argument,output from args]])
+
+        parse_info.db_files_conn = conn
+        parse_info.db_files_cursor = cursor
+    end
+end
+
+function prepare_db_refs(parse_info)
+    local conn
+    local err
+    conn = sqlenv:connect(config.db_refs)
+    if conn == nil then
+        print("Error :Could not open reference database.")
+        os.exit(1)
+    end
+    conn:execute([[create table if not exists symbols
+    (usr varchar(1024) primary key, name varchar(1024), membername varchar(1024),
+    kind char(16), type char(32),
+    parent varchar(1024), file varchar(1024), line int)]])
+
+    parse_info.db_refs_conn = conn
+end
+
+function prepare_parse(parse_info)
+end
+
+function get_files_from_dir(parse_info, files_info, files_table)
+end
+
+function get_files_from_db(parse_info, files_info, files_table)
+    local cursor = parse_info.db_files_cursor
+    local result = {}
+    local count = 0
+    result = cursor:fetch(result)
+    while result ~= nil do
+        count = count + 1
+        files_table[count] = std.tree.clone(result)
+        result = cursor:fetch(result)
+        if count >= options.table_max then
+            break
+        end
+    end
+    files_table.count = count
+    if result == nil then
+        files_info.done = true
+    end
+end
+
+function get_files(parse_info, files_info, files_table)
+    if options.no_file_db then
+        get_files_from_dir(parse_info, files_info, files_table)
+    else
+        get_files_from_db(parse_info, files_info, files_table)
+    end
+end
+
+function write_to_pipe(obj, pipewrite)
+    local obj_str = json.encode(obj)
+    obj_str = obj_str.."\0"
+    posix.write(pipewrite, obj_str)
 end
 
 function get_kind_string(kind)
@@ -105,84 +191,10 @@ function get_kind_string(kind)
     return ""
 end
 
-function get_type_string(kind_string)
-    if kind_string == "ClassDecl" then
-        return "c"
-    elseif kind_string == "MacroDefinition" then
-        return "d"
-    elseif kind_string == "EnumConstantDecl" then
-        return "e"
-    elseif kind_string == "FunctionDecl"
-        or kind_string == "CXXMethod" then
-        return "f"
-    elseif kind_string == "EnumDecl" then
-        return "g"
-    elseif kind_string == "FieldDecl" then
-        return "m"
-    elseif kind_string == "StructDecl" then
-        return "s"
-    elseif kind_string == "TypedefDecl" then
-        return "t"
-    elseif kind_string == "UnionDecl" then
-        return "u"
-    elseif kind_string == "VarDecl" then
-        return "v"
-    end
-    return ""
-end
-
-function update_tag(tag, tag_conn)
-    if tag.usr == "" then
-        print("No USR, give up.")
-        return
-    end
-    local sql = string.format("select usr,name,kind from symbols where usr='%s'", tag.usr)
-    local cur,err = tag_conn:execute(sql)
-
-    if cur == nil then
-        print(err)
-        return
-    end
-
-    if debug_info then
-        local debug = string.format("name: %s\tmember: %s\tfile: %s\tusr: %s\tkind: %s\ttype: %s",
-            tag.name, tag.member, tag.file, tag.usr, tag.kind, tag.type)
-        print(debug)
-    end
-
-    local result = {}
-    result = cur:fetch(result);
-    local update_sql = nil
-    if result ~= nil then
-        if debug_info then
-            print("result kind: "..result[3])
-        end
-
-        if result[3] == "decl" then
-            if tag.kind == "define" then
-                update_sql = string.format(
-                [[update symbols set name='%s',membername='%s',kind='%s',type='%s',parent='%s',file='%s',line=%d
-                where usr='%s']],
-                tag.name, tag.member, tag.kind, tag.type, tag.parent, tag.file, tag.line, tag.usr);
-            end
-        end
-    else
-        update_sql = string.format(
-        [[insert into symbols (usr, name, membername, kind, type, parent, file, line)
-        values('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d')]],
-        tag.usr, tag.name, tag.member, tag.kind, tag.type, tag.parent, tag.file, tag.line)
-    end
-
-    cur:close()
-    if update_sql then
---        print(update_sql)
-        tag_conn:execute(update_sql)
-    end
-end
-
-function parse_visitor(cursor, parent, fileinfo, tag_conn)
+function parse_visitor(cursor, parent, fileinfo, pipewrite)
     local kind = cursor:getKind()
     local tag = {}
+    tag.cmd = "tag"
 
 
     if kind == clang.cursorkind.StructDecl
@@ -232,7 +244,7 @@ function parse_visitor(cursor, parent, fileinfo, tag_conn)
             tag.member = ""
         end
 
-        update_tag(tag, tag_conn)
+        write_to_pipe(tag, pipewrite)
     end
 
     if kind == clang.cursorkind.Namespace
@@ -277,9 +289,11 @@ function parse_visitor(cursor, parent, fileinfo, tag_conn)
     return clang.visitor.continue
 end
 
-function parse_file(fileinfo, tag_conn)
+
+function do_parse_single_file(parse_info, fileinfo, pipewrite)
 	local filepath = fileinfo[1]
-	local filedir = fileinfo[2]
+	local filedir = fileinfo[3]
+    --print(json.encode(fileinfo))
 	if lfs.chdir(filedir) == nil then
 		return nil
 	end
@@ -287,61 +301,240 @@ function parse_file(fileinfo, tag_conn)
         return nil
     end
 
-	print("Filename:"..fileinfo[1])
-    print("File dir:"..fileinfo[2])
 
 	local index = clang.createIndex(0, 0)
-	local tu = clang.createTUFromSourceFile(index, filepath, fileinfo[3])
+	local tu = clang.createTUFromSourceFile(index, filepath, fileinfo[4])
 	if tu == nil then
-		-- TODO: LOG
-        print("-------------------")
         clang.disposeIndex(index)
 		return nil
 	end
 
     local rootcursor = clang.getTUCursor(tu)
-    clang.visitChildren(rootcursor, parse_visitor, fileinfo, tag_conn)
+    clang.visitChildren(rootcursor, parse_visitor, fileinfo, pipewrite)
     clang.disposeTU(tu)
     clang.disposeIndex(index)
     return true
 end
 
-function prepare_tagdb(tag_conn)
-    tag_conn:execute([[create table if not exists symbols
-    (usr varchar(1024) primary key, name varchar(1024), membername varchar(1024),
-    kind char(16), type char(32),
-    parent varchar(1024), file varchar(1024), line int)]])
-end
-
-function parse_all_files(arg_conn, tag_conn)
-    local cursor = arg_conn:execute([[select * from args]])
-
-    prepare_tagdb(tag_conn)
-    
-    local result = {}
-    local count = 0
-    result = cursor:fetch(result)
-    while result ~= nil do
-        local ret = parse_file(result, tag_conn)
-        result = cursor:fetch(result)
-        if count > 70 then
---            break
-        end
---        count = count + 1
+function do_parse_job(parse_info, files_table, first, last, pipewrite, pid)
+    local i = first
+    while i < (last+1) do
+        do_parse_single_file(parse_info, files_table[i], pipewrite)
+        i = i+1
     end
 
-    cursor:close()
-    --local attach_db, err = sqlenv:connect(tagdb_path_save)
-    --local attach = string.format("attach ':memory:' as tags")
-    --print(attach)
-    --attach_db:execute(attach)
+    local cmd_exit = {}
+    cmd_exit.cmd = "exit"
+    cmd_exit.pid = pid
+    write_to_pipe(cmd_exit, pipewrite)
 end
+
+function table_count(t)
+    local count = 0
+    for k,v in pairs(t) do
+        count = count + 1
+    end
+    return count
+end
+
+function handle_msg_tag(tag, tag_conn)
+    if tag.usr == "" then
+        print("No USR, give up.")
+        return
+    end
+    local sql = string.format("select usr,name,kind from symbols where usr='%s'", tag.usr)
+    local cur,err = tag_conn:execute(sql)
+
+    if cur == nil then
+        print(err)
+        return
+    end
+
+    if debug_info then
+        local debug = string.format("name: %s\tmember: %s\tfile: %s\tusr: %s\tkind: %s\ttype: %s",
+            tag.name, tag.member, tag.file, tag.usr, tag.kind, tag.type)
+        print(debug)
+    end
+
+    local result = {}
+    result = cur:fetch(result);
+    local update_sql = nil
+    if result ~= nil then
+        if debug_info then
+            print("result kind: "..result[3])
+        end
+
+        if result[3] == "decl" then
+            if tag.kind == "define" then
+                update_sql = string.format(
+                [[update symbols set name='%s',membername='%s',kind='%s',type='%s',parent='%s',file='%s',line=%d
+                where usr='%s']],
+                tag.name, tag.member, tag.kind, tag.type, tag.parent, tag.file, tag.line, tag.usr);
+            end
+        end
+    else
+        update_sql = string.format(
+        [[insert into symbols (usr, name, membername, kind, type, parent, file, line)
+        values('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d')]],
+        tag.usr, tag.name, tag.member, tag.kind, tag.type, tag.parent, tag.file, tag.line)
+    end
+
+    cur:close()
+    if update_sql then
+        tag_conn:execute(update_sql)
+    end
+end
+
+function handle_msg(msg_json, parse_info)
+    --print("-->", msg_json)
+    local msg = json.decode(msg_json)
+    if msg.cmd == "exit" then
+        return nil, msg.pid
+    elseif msg.cmd == "tag" then
+        handle_msg_tag(msg, parse_info.db_refs_conn)
+    end
+    return true
+end
+
+function get_msg_from_pipe(parse_info, piperead, buf)
+    local msg, err
+    local last_msg
+    local ret, pid
+    while true do
+        if buf.last_msg ~= nil then
+            msg = buf.last_msg
+            buf.last_msg = nil
+        else
+            msg, err = posix.read(piperead, 512)
+        end
+        if string.len(msg) == 0 then
+            posix.sleep(1)
+        elseif msg ~= nil then
+            if last_msg ~= nil then
+                msg = last_msg..msg
+                last_msg = nil
+            end
+            while msg ~= nil do
+                local last_pos = string.find(msg, "\0")
+                if last_pos ~= nil then
+                    local msg_json = string.sub(msg, 1, last_pos-1)
+                    ret, pid = handle_msg(msg_json, parse_info)
+                    last_msg = string.sub(msg, last_pos+1, -1)
+                    if string.len(last_msg) == 0 then
+                        last_msg = nil
+                    end
+                    if ret == nil then
+                        buf.last_msg = last_msg
+                        return pid
+                    end
+                    msg = last_msg
+                else
+                    last_msg = msg
+                    msg = nil
+                end
+            end
+        else
+            return nil
+        end
+    end
+end
+
+function update_database(parse_info, piperead)
+    local buf = {}
+    parse_info.db_refs_conn:execute("begin")
+    while true do
+        ret = get_msg_from_pipe(parse_info, piperead, buf)
+        if ret == nil then
+            break
+        else
+            parse_info.proc[ret] = nil
+            if table_count(parse_info.proc) == 0 then
+                break
+            end
+        end
+    end
+    parse_info.db_refs_conn:execute("commit")
+end
+
+function do_parse(parse_info, files_table)
+    local first 
+    local last = 0
+    local jobs = 1
+    local piperead, pipewrite
+    piperead, pipewrite = posix.pipe()
+    parse_info.proc = {}
+    while jobs <= options.jobs do
+        first = last + 1
+        last = math.ceil(first + files_table.count/options.jobs)
+        if last > files_table.count then
+            last = files_table.count
+        end
+        local pid = posix.fork()
+        if pid == 0 then
+            pid = posix.getpid("pid")
+            do_parse_job(parse_info, files_table, first, last, pipewrite, pid)
+            os.exit(0)
+        else
+            parse_info.proc[pid] = true
+        end
+        jobs = jobs+1
+    end
+    update_database(parse_info, piperead)
+    parse_info.proc = nil
+end
+
+options = parse_args()
+setup_path(config, options)
+
+files_table = {}
+files_info  = {}
+parse_info  = {}
+
+prepare_files(parse_info, files_info)
+prepare_db_refs(parse_info)
+prepare_parse(parse_info)
+repeat
+    get_files(parse_info, files_info, files_table)
+    do_parse(parse_info, files_table)
+until files_info.done
+os.exit(0)
+
+
+function get_type_string(kind_string)
+    if kind_string == "ClassDecl" then
+        return "c"
+    elseif kind_string == "MacroDefinition" then
+        return "d"
+    elseif kind_string == "EnumConstantDecl" then
+        return "e"
+    elseif kind_string == "FunctionDecl"
+        or kind_string == "CXXMethod" then
+        return "f"
+    elseif kind_string == "EnumDecl" then
+        return "g"
+    elseif kind_string == "FieldDecl" then
+        return "m"
+    elseif kind_string == "StructDecl" then
+        return "s"
+    elseif kind_string == "TypedefDecl" then
+        return "t"
+    elseif kind_string == "UnionDecl" then
+        return "u"
+    elseif kind_string == "VarDecl" then
+        return "v"
+    end
+    return ""
+end
+
+
+function parse_file(fileinfo, tag_conn)
+end
+
 
 function parse_single_file(arg_conn, tag_conn, filename)
     local sql = string.format("select filename,dir,argument,output from args where filename='%s'", filename)
     local cursor = arg_conn:execute(sql)
 
-    prepare_tagdb(tag_conn)
     local result = {}
     result = cursor:fetch(result)
     if result == nil then
