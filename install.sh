@@ -65,6 +65,21 @@ install()
             exit 1
         fi
     fi
+    pathshare="$installpath/share"
+    pathsharelua="$pathshare/lua/"
+    pathshareluav="$pathshare/lua/5.1/"
+    if [ ! -d $pathshare ]
+    then
+        mkdir $pathshare
+    fi
+    if [ ! -d $pathsharelua ]
+    then
+        mkdir $pathsharelua
+    fi
+    if [ ! -d $pathshareluav ]
+    then
+        mkdir $pathshareluav
+    fi
 
     cp luabind/luaclang.so       $pathbin/
     cp luabind/luaposix.so       $pathbin/
@@ -75,7 +90,8 @@ install()
     cp script/fakemake           $pathbin/fakemake
     cp script/tagslib.so         $pathbin/tagslib.so
     cp script/test.lua           $pathbin/test.lua
-    cp script/fakeparse.lua   $pathbin/fakeparse
+    cp script/fakeparse.lua      $pathbin/fakeparse
+    cp lualib/clangaux.lua       $pathshareluav/clangaux.lua
 
     chmod u+x $pathbin/fakedaemonexit
 }

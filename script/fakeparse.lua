@@ -6,6 +6,7 @@ require("lfs")
 require("luasql.sqlite3")
 require("tagslib")
 require("luaclang")
+require("clangaux")
 require("luaposix")
 require("json")
 require("std")
@@ -138,7 +139,7 @@ function prepare_db_refs(parse_info)
     conn:execute([[create table if not exists symbols
     (usr varchar(1024) primary key, name varchar(1024), membername varchar(1024),
     kind char(16), type char(32),
-    parent varchar(1024), file varchar(1024), line int)]])
+    parent varchar(1024), file varchar(1024), line int, linkage varchar(16))]])
 
     parse_info.db_refs_conn = conn
 end
@@ -209,6 +210,7 @@ function parse_visitor(cursor, parent, fileinfo, pipewrite)
         or kind == clang.cursorkind.MacroDefinition
         then
         tag.name = cursor:getSpelling()
+        tag.linkage = clangaux.getLinkageString(cursor:getLinkage())
         local def
         if cursor:isDefinition() then
             def = cursor
@@ -340,6 +342,7 @@ end
 function handle_msg_tag(tag, tag_conn)
     if tag.usr == "" then
         print("No USR, give up.")
+        --print(json.encode(tag))
         return
     end
     local sql = string.format("select usr,name,kind from symbols where usr='%s'", tag.usr)
@@ -367,16 +370,17 @@ function handle_msg_tag(tag, tag_conn)
         if result[3] == "decl" then
             if tag.kind == "define" then
                 update_sql = string.format(
-                [[update symbols set name='%s',membername='%s',kind='%s',type='%s',parent='%s',file='%s',line=%d
-                where usr='%s']],
-                tag.name, tag.member, tag.kind, tag.type, tag.parent, tag.file, tag.line, tag.usr);
+                [[update symbols set name='%s',membername='%s',kind='%s',type='%s',parent='%s',file='%s',line=%d,
+                linkage='%s' where usr='%s']],
+                tag.name, tag.member, tag.kind, tag.type, tag.parent, tag.file, tag.line, tag.linkage, tag.usr);
             end
         end
     else
         update_sql = string.format(
-        [[insert into symbols (usr, name, membername, kind, type, parent, file, line)
-        values('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d')]],
-        tag.usr, tag.name, tag.member, tag.kind, tag.type, tag.parent, tag.file, tag.line)
+        [[insert into symbols (usr, name, membername, kind, type, parent, file, line, linkage)
+        values('%s', '%s', '%s', '%s', '%s', '%s', '%s', %d, '%s')]],
+        tag.usr, tag.name, tag.member, tag.kind, tag.type, tag.parent, tag.file, tag.line, tag.linkage)
+        print(update_sql)
     end
 
     cur:close()
@@ -498,33 +502,6 @@ repeat
     do_parse(parse_info, files_table)
 until files_info.done
 os.exit(0)
-
-
-function get_type_string(kind_string)
-    if kind_string == "ClassDecl" then
-        return "c"
-    elseif kind_string == "MacroDefinition" then
-        return "d"
-    elseif kind_string == "EnumConstantDecl" then
-        return "e"
-    elseif kind_string == "FunctionDecl"
-        or kind_string == "CXXMethod" then
-        return "f"
-    elseif kind_string == "EnumDecl" then
-        return "g"
-    elseif kind_string == "FieldDecl" then
-        return "m"
-    elseif kind_string == "StructDecl" then
-        return "s"
-    elseif kind_string == "TypedefDecl" then
-        return "t"
-    elseif kind_string == "UnionDecl" then
-        return "u"
-    elseif kind_string == "VarDecl" then
-        return "v"
-    end
-    return ""
-end
 
 
 function parse_file(fileinfo, tag_conn)
