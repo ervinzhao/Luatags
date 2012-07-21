@@ -81,6 +81,11 @@ install()
         mkdir $pathshareluav
     fi
 
+    pathlib="$installpath/lib"
+    if [ ! -d $pathlib ]; then
+        mkdir $pathlib
+    fi
+
     cp luabind/luaclang.so       $pathbin/
     cp luabind/luaposix.so       $pathbin/
     cp script/fakecc.lua         $pathbin/fakecc
@@ -91,7 +96,9 @@ install()
     cp script/tagslib.so         $pathbin/tagslib.so
     cp script/test.lua           $pathbin/test.lua
     cp script/fakeparse.lua      $pathbin/fakeparse
-    cp lualib/clangaux.lua       $pathshareluav/clangaux.lua
+    #cp lualib/clangaux.lua       $pathshareluav/clangaux.lua
+    cp lualib/clangaux.lua       $pathlib/clangaux.lua
+    cp -r lualib-ext/*           $pathlib/
 
     chmod u+x $pathbin/fakedaemonexit
 }
