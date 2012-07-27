@@ -450,6 +450,31 @@ static int bind_equalCursors(lua_State *L)
 }
 
 /*
+ * CXFile
+ * clang_getIncludedFile(CXCursor cursor)
+ */
+static int bind_getIncludedFile(lua_State *L)
+{
+    CXCursor *cursor_p;
+    CXFile *file;
+
+    cursor_p = luaL_checkudata(L, 1, TYPE_CXCursor);
+
+    file = clang_getIncludedFile(*cursor_p);
+
+    lua_settop(L, 0);
+    if(file != NULL)
+    {
+        help_pushlightudata(L, file);
+        help_setudatatype(L, TYPE_CXFile);
+    }else{
+        lua_pushnil(L);
+    }
+    return 1;
+
+}
+
+/*
  * CXSourceLocation
  * clang_getCursorLocation(CXCursor)
  */
@@ -740,6 +765,7 @@ static struct luaL_reg luaclang_cursor[] =
 {
     {"getKind",                         bind_getCursorKind},
     {"getType",                         bind_getCursorType},
+    {"getIncludedFile",                 bind_getIncludedFile},
     {"getLocation",                     bind_getCursorLocation},
     {"isNull",                          bind_cursor_isNULL},
     {"equal",                           bind_equalCursors},
