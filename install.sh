@@ -96,7 +96,8 @@ install()
     cp script/tagslib.so         $pathbin/tagslib.so
     cp script/test.lua           $pathbin/test.lua
     cp script/fakeparse.lua      $pathbin/fakeparse
-    #cp lualib/clangaux.lua       $pathshareluav/clangaux.lua
+    cp script/query.lua          $pathbin/query
+    #cp lualib/clangaux.lua      $pathshareluav/clangaux.lua
     cp lualib/clangaux.lua       $pathlib/clangaux.lua
     cp -r lualib-ext/*           $pathlib/
 

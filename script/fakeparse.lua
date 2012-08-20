@@ -64,6 +64,12 @@ function parse_args()
         elseif arg[i] == "--target-dir" then
             options.target_dir= arg[i+1]
             i = i+1
+        elseif arg[i] == "--jobs" then
+            local jobs = tonumber(arg[i+1])
+            if jobs ~=nil then
+                options.jobs = jobs
+            end
+            i = i+1
         --[[elseif arg[i] == "--build-dir" then
             options.build_dir = arg[i+1] 
             i = i+1]]--
@@ -93,6 +99,9 @@ function setup_path(config, options)
     if options.no_file_db == nil then
         config.db_files = options.target_dir..g_config.db_files
         if not posix.access(config.db_files, "r") then
+            if options.single_file then
+                return
+            end
             print("Error :Could not find file database.")
             print("Path :", config.db_files)
             os.exit(1)
@@ -104,7 +113,34 @@ function setup_path(config, options)
 
 end
 
+function prepare_single_file(parse_info)
+    local conn, err
+    conn, err = sqlenv:connect(config.db_files)
+    if conn == nil then
+        return
+    end
+    filepath = tagslib.realpath(options.single_file)
+    if filepath == nil then
+        print("Error :Could not access file :", options.single_file)
+        os.exit(1)
+    end
+    local cursor
+    local sql = string.format([[
+    select filename,filetype,dir,argument,output from args where filename='%s']],
+    filepath)
+    cursor, err = conn:execute(sql)
+    if cursor == nil then
+        print(err)
+        return
+    end
+    parse_info.db_files_cursor = cursor
+end
+
 function prepare_files(parse_info, files_info)
+    if options.single_file then
+        prepare_single_file(parse_info)
+        return
+    end
     if options.no_file_db == nil then
         local conn
         local err
@@ -116,7 +152,6 @@ function prepare_files(parse_info, files_info)
         local cursor, err = conn:execute([[
         select count(*) from sqlite_master where type='table' and name='args'
         ]])
-        print(err)
         if tonumber(cursor:fetch()) ~= 1 then
             print("Error :Table args does not exist in file database.")
             os.exit(1)
@@ -140,6 +175,9 @@ function prepare_db_refs(parse_info)
     (usr varchar(1024) primary key, name varchar(1024), membername varchar(1024),
     kind char(16), type char(32),
     parent varchar(1024), file varchar(1024), line int, linkage varchar(16))]])
+
+    conn:execute([[create table if not exists headers
+    (header varchar(1024), source varchar(1024), line int)]])
 
     parse_info.db_refs_conn = conn
 end
@@ -170,6 +208,22 @@ function get_files_from_db(parse_info, files_info, files_table)
 end
 
 function get_files(parse_info, files_info, files_table)
+    if options.single_file then
+        local file = {}
+        if parse_info.db_files_cursor then
+            file = parse_info.db_files_cursor:fetch(file)
+        else
+            file[1] = tagslib.realpath(options.single_file)
+            file[2] = "source"
+            file[3] = "."
+            file[4] = ""
+            file[5] = ""
+        end
+        files_table[1] = file;
+        files_table.count = 1;
+        files_info.done = true
+        return
+    end
     if options.no_file_db then
         get_files_from_dir(parse_info, files_info, files_table)
     else
@@ -213,9 +267,11 @@ function parse_visitor(cursor, parent, fileinfo, pipewrite)
         tag.linkage = clangaux.getLinkageString(cursor:getLinkage())
         local def
         if cursor:isDefinition() then
+            --print(tag.name, "===")
             def = cursor
             tag.kind = "define"
         else
+            --print(tag.name, "---")
             def = cursor:getDefinition()
             if def:isNull() then
                 tag.kind = "decl"
@@ -247,6 +303,18 @@ function parse_visitor(cursor, parent, fileinfo, pipewrite)
         end
 
         write_to_pipe(tag, pipewrite)
+    elseif kind == clang.cursorkind.InclusionDirective then
+        tag.cmd = "header"
+        tag.file = fileinfo[1]
+        tag.header = cursor:getIncludedFile()
+        if tag.header ~= nil then
+            tag.header = tagslib.realpath(clang.getFileName(tag.header))
+            local loc = cursor:getLocation()
+            local file, column
+            file, tag.line, column = loc:getExpansion()
+            
+            write_to_pipe(tag, pipewrite)
+        end
     end
 
     if kind == clang.cursorkind.Namespace
@@ -339,9 +407,34 @@ function table_count(t)
     return count
 end
 
+function handle_msg_header(header, conn)
+    local sql = string.format([[select header,source from headers 
+    where header='%s' and source='%s']], header.header, header.file)
+    local cur,err = conn:execute(sql)
+
+    if cur == nil then
+        print(err)
+        return
+    end
+
+    local result = {}
+    result = cur:fetch(result)
+    if result == nil then
+        sql =string.format([[insert into headers (header, source, line)
+        values('%s', '%s', %d)]], header.header, header.file, header.line)
+    else
+        sql = nil
+    end
+
+    cur:close()
+    if sql ~= nil then
+        conn:execute(sql)
+    end
+end
+
 function handle_msg_tag(tag, tag_conn)
     if tag.usr == "" then
-        print("No USR, give up.")
+        --print("No USR, give up.")
         --print(json.encode(tag))
         return
     end
@@ -374,13 +467,15 @@ function handle_msg_tag(tag, tag_conn)
                 linkage='%s' where usr='%s']],
                 tag.name, tag.member, tag.kind, tag.type, tag.parent, tag.file, tag.line, tag.linkage, tag.usr);
             end
+        else
+            --print("-->>-->>", result[3])
         end
     else
         update_sql = string.format(
         [[insert into symbols (usr, name, membername, kind, type, parent, file, line, linkage)
         values('%s', '%s', '%s', '%s', '%s', '%s', '%s', %d, '%s')]],
         tag.usr, tag.name, tag.member, tag.kind, tag.type, tag.parent, tag.file, tag.line, tag.linkage)
-        print(update_sql)
+        --print(update_sql)
     end
 
     cur:close()
@@ -396,6 +491,13 @@ function handle_msg(msg_json, parse_info)
         return nil, msg.pid
     elseif msg.cmd == "tag" then
         handle_msg_tag(msg, parse_info.db_refs_conn)
+    elseif msg.cmd == "header" then
+        handle_msg_header(msg, parse_info.db_refs_conn)
+    end
+    parse_info.tran = parse_info.tran + 1
+    if parse_info.tran >= 102400 then
+        parse_info.db_refs_conn:execute("commit")
+        parse_info.db_refs_conn:execute("begin")
     end
     return true
 end
@@ -446,6 +548,7 @@ end
 function update_database(parse_info, piperead)
     local buf = {}
     parse_info.db_refs_conn:execute("begin")
+    parse_info.tran = 0
     while true do
         ret = get_msg_from_pipe(parse_info, piperead, buf)
         if ret == nil then
